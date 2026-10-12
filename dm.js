@@ -14,7 +14,7 @@
   // ============================================================
   const CONFIG = {
     // if set, loads this image and fits it in the button. otherwise uses inline SVG.
-    LOGO_URL: '',         // e.g. 'https://raw.githubusercontent.com/you/repo/main/logo.png'
+    LOGO_URL: 'dm.png',         // e.g. 'https://raw.githubusercontent.com/you/repo/main/logo.png'
     // optional self-update source. leave '' to disable.
     SELF_UPDATE_URL: '',  // e.g. 'https://raw.githubusercontent.com/you/repo/main/dm.js'
     // OCR language pack for Tesseract
