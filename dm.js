@@ -1,8 +1,5 @@
 /* DeltaMath assistant — single-file console script
  * Load: fetch('https://raw.githubusercontent.com/<you>/<repo>/main/dm.js').then(r=>r.text()).then(eval)
- *
- * Config below. If you're hosting on GitHub, drop your own deltamath-logo.png
- * in the same repo and point LOGO_URL at its raw URL.
  */
 
 (function () {
@@ -13,11 +10,8 @@
   // CONFIG
   // ============================================================
   const CONFIG = {
-    // if set, loads this image and fits it in the button. otherwise uses inline SVG.
-    LOGO_URL: 'dm.png',         // e.g. 'https://raw.githubusercontent.com/you/repo/main/logo.png'
-    // optional self-update source. leave '' to disable.
-    SELF_UPDATE_URL: '',  // e.g. 'https://raw.githubusercontent.com/you/repo/main/dm.js'
-    // OCR language pack for Tesseract
+    LOGO_URL: 'dm.png',
+    SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
   };
 
@@ -89,14 +83,13 @@
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
     run();
   }, true);
-  // right-click opens a small menu (Screenshot / OCR / Update)
   btn.addEventListener('contextmenu', e => {
     e.preventDefault(); e.stopPropagation();
     openMenu();
   }, true);
 
   // ============================================================
-  // NUMBER + STRING HELPERS
+  // HELPERS
   // ============================================================
   function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a; }
   function frac(x) {
@@ -145,16 +138,14 @@
     return merged.join('\n');
   }
 
-  // find any large <img> inside the question region (not icons/logos)
   function findQuestionImages() {
     const imgs = [...document.querySelectorAll('img')];
     return imgs.filter(im => {
       const w = im.naturalWidth || im.width;
       const h = im.naturalHeight || im.height;
-      if (w < 80 || h < 40) return false;             // too small — icon
+      if (w < 80 || h < 40) return false;
       if (!im.src) return false;
       if (/logo|icon|avatar|deltamath\.com\/static/i.test(im.src)) return false;
-      // must be visible
       const r = im.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) return false;
       return true;
@@ -176,9 +167,7 @@
     return out.join('\n');
   }
 
-  // screenshot the question card and copy it to clipboard
   async function copyQuestionScreenshot() {
-    // find the biggest visible container that includes "Question" or "Answer"
     let target = null;
     for (const el of document.querySelectorAll('div,section,main')) {
       const t = el.innerText || '';
@@ -190,14 +179,9 @@
     if (!target) { showToast('Could not find question region'); return; }
     try {
       showToast('capturing…');
-      // Use html2canvas-free approach: SVG foreignObject trick won't work cross-origin.
-      // Instead, use the Clipboard API + screen capture:
-      // Prompt user for screen capture, then draw region.
-      // Simplest path that works without extra libs:
       const rect = target.getBoundingClientRect();
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' } });
       const track = stream.getVideoTracks()[0];
-      // @ts-ignore
       const imageCapture = new ImageCapture(track);
       const bitmap = await imageCapture.grabFrame();
       track.stop();
@@ -206,7 +190,6 @@
       canvas.height = bitmap.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(bitmap, 0, 0);
-      // crop to question region (approx — assumes window-scale capture)
       const sx = rect.left * (bitmap.width / window.innerWidth);
       const sy = rect.top * (bitmap.height / window.innerHeight);
       const sw = rect.width * (bitmap.width / window.innerWidth);
@@ -219,7 +202,6 @@
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           showToast('copied — paste into a vision model');
         } catch (e) {
-          // fallback: download
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = 'problem.png';
@@ -273,7 +255,7 @@
   }
 
   // ============================================================
-  // PAPER-STYLE ELIMINATION NARRATION
+  // PAPER-STYLE ELIMINATION
   // ============================================================
   function narrateSystem(eqs, vars) {
     const out = [];
@@ -282,32 +264,32 @@
     for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
     out.push('');
 
-    const levels = [];
-    let currentRows = eqs.map(e => ({ coef: { ...e.coef }, rhs: e.rhs }));
-    let currentLabels = eqs.map((_, i) => String(i + 1));
-    let currentVars = [...vars];
-    levels.push({ rows: currentRows.map(r => ({ coef: { ...r.coef }, rhs: r.rhs })), labels: [...currentLabels], vars: [...currentVars] });
-
+    let rows = eqs.map((e, i) => ({ coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) }));
     let counter = eqs.length;
-    let stepNum = 0;
 
-    while (currentRows.length > 1 && currentVars.length > 1) {
-      stepNum++;
-      const elimVar = currentVars[0];
-      out.push(`Step ${stepNum}:  Eliminate ${elimVar}.`);
+    for (let stepIdx = 0; stepIdx < vars.length - 1; stepIdx++) {
+      const elimVar = vars[stepIdx];
+
+      let allValid = true;
+      for (let k = 0; k + 1 < rows.length; k++) {
+        const cA = rows[k].coef[elimVar] || 0;
+        const cB = rows[k + 1].coef[elimVar] || 0;
+        if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) { allValid = false; break; }
+      }
+      if (!allValid) break;
+
+      out.push(`Step ${stepIdx + 1}:  Eliminate ${elimVar}.`);
       out.push('');
 
-      const nextRows = [], nextLabels = [];
-      for (let p = 0; p < currentRows.length - 1; p++) {
-        const A = currentRows[p], B = currentRows[p + 1];
-        const LA = currentLabels[p], LB = currentLabels[p + 1];
+      const nextRows = [];
+      for (let k = 0; k + 1 < rows.length; k++) {
+        const A = rows[k], B = rows[k + 1];
         const cA = A.coef[elimVar] || 0;
         const cB = B.coef[elimVar] || 0;
-        if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) continue;
 
-        out.push(`  Stack (${LA}) and (${LB}):`);
-        out.push(`    (${LA})   ${fmtEq(A, vars)}`);
-        out.push(`    (${LB})   ${fmtEq(B, vars)}`);
+        out.push(`  Stack (${A.label}) and (${B.label}):`);
+        out.push(`    (${A.label})   ${fmtEq(A, vars)}`);
+        out.push(`    (${B.label})   ${fmtEq(B, vars)}`);
         out.push('');
 
         const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
@@ -319,102 +301,102 @@
 
         if (mA !== 1 || mB !== 1) {
           out.push(`  Multiply to match ${elimVar}-coefficients:`);
-          if (mA !== 1) out.push(`    ${mA} × (${LA}):   ${fmtEq(A2, vars)}`);
-          if (mB !== 1) out.push(`    ${mB} × (${LB}):   ${fmtEq(B2, vars)}`);
+          if (mA !== 1) out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
+          if (mB !== 1) out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
           out.push('');
         }
 
         counter++;
         const newLabel = String(counter);
 
-        out.push(sameSign ? `  Subtract (${LA}) from (${LB}):` : `  Add the two equations:`);
+        out.push(sameSign ? `  Subtract (${A.label}) from (${B.label}):` : `  Add the two equations:`);
         const sign = sameSign ? '−' : '+';
         out.push(`    (${fmtEq(A2, vars)}) ${sign} (${fmtEq(B2, vars)})`);
         out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
         out.push('');
 
-        nextRows.push(result);
-        nextLabels.push(newLabel);
+        nextRows.push({ coef: result.coef, rhs: result.rhs, label: newLabel });
       }
-
-      currentRows = nextRows;
-      currentLabels = nextLabels;
-      currentVars = currentVars.slice(1);
-      levels.push({ rows: currentRows.map(r => ({ coef: { ...r.coef }, rhs: r.rhs })), labels: [...currentLabels], vars: [...currentVars] });
+      rows = nextRows;
     }
 
-    // top-level single-var
-    const topLevel = levels[levels.length - 1];
-    const topRow = topLevel.rows[0];
-    const topLabel = topLevel.labels[0];
-    const topVar = topLevel.vars[0];
-    const cTop = topRow.coef[topVar] || 0;
-    const topVal = topRow.rhs / cTop;
+    // ---- Solve: iteratively pick any equation with exactly one unknown ----
+    const sol = {};
+    const allRows = [
+      ...rows,
+      ...eqs.map((e, i) => ({ coef: e.coef, rhs: e.rhs, label: String(i + 1) }))
+    ];
 
-    const sol = {}; sol[topVar] = topVal;
+    let guard = 0;
+    while (Object.keys(sol).length < vars.length && guard++ < 20) {
+      let found = false;
+      for (const row of allRows) {
+        const unknowns = vars.filter(v => Math.abs(row.coef[v] || 0) > 1e-10 && sol[v] === undefined);
+        if (unknowns.length !== 1) continue;
 
-    out.push(`From (${topLabel}):`);
-    out.push(`  ${fmtEq(topRow, vars)}`);
-    if (Math.abs(cTop - 1) > 1e-10) out.push(`  ${frac(cTop)}${topVar} = ${frac(topRow.rhs)}`);
-    out.push(`  ${topVar} = ${frac(topVal)}`);
-    out.push('');
-
-    // back-substitute up the levels
-    for (let lv = levels.length - 2; lv >= 0; lv--) {
-      const level = levels[lv];
-      const row = level.rows[0];
-      const label = level.labels[0];
-      const targetVar = level.vars[0];
-      const cT = row.coef[targetVar] || 0;
-      if (Math.abs(cT) < 1e-10) continue;
-
-      out.push(`From (${label}):   ${fmtEq(row, vars)}`);
-      const known = level.vars.slice(1).filter(v => sol[v] !== undefined).map(v => `${v} = ${frac(sol[v])}`);
-      if (known.length) out.push(`  Substitute ${known.join(', ')}:`);
-
-      let subLine = '', first = true;
-      for (const vv of vars) {
-        const c = row.coef[vv] || 0;
-        if (Math.abs(c) < 1e-10) continue;
-        let term;
-        if (sol[vv] !== undefined) {
-          const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
-          const vStr = frac(sol[vv]);
-          term = (Math.abs(c) === 1) ? `(${vStr})` : `${cStr}(${vStr})`;
-        } else {
-          const absC = Math.abs(c);
-          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-          term = cStr + vv;
+        const v = unknowns[0];
+        let rhsAfter = row.rhs;
+        const knownSubs = [];
+        for (const other of vars) {
+          if (other === v) continue;
+          if (sol[other] !== undefined) {
+            rhsAfter -= (row.coef[other] || 0) * sol[other];
+            knownSubs.push(`${other} = ${frac(sol[other])}`);
+          }
         }
-        if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
-        else subLine += (c < 0 ? ' − ' : ' + ') + term;
-      }
-      out.push(`    ${subLine} = ${frac(row.rhs)}`);
+        const val = rhsAfter / row.coef[v];
+        sol[v] = val;
 
-      let simpLine = '', first2 = true, sumNon = 0;
-      for (const vv of vars) {
-        const c = row.coef[vv] || 0;
-        if (Math.abs(c) < 1e-10) continue;
-        if (sol[vv] !== undefined) {
-          const prod = c * sol[vv]; sumNon += prod;
-          const term = frac(Math.abs(prod));
-          if (first2) { simpLine += (prod < 0 ? '−' : '') + term; first2 = false; }
-          else simpLine += (prod < 0 ? ' − ' : ' + ') + term;
-        } else {
-          const absC = Math.abs(c);
-          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-          const term = cStr + vv;
-          if (first2) { simpLine += (c < 0 ? '−' : '') + term; first2 = false; }
-          else simpLine += (c < 0 ? ' − ' : ' + ') + term;
+        out.push(`From (${row.label}):   ${fmtEq(row, vars)}`);
+        if (knownSubs.length > 0) out.push(`  Substitute ${knownSubs.join(', ')}:`);
+
+        let subLine = '', first = true;
+        for (const vv of vars) {
+          const c = row.coef[vv] || 0;
+          if (Math.abs(c) < 1e-10) continue;
+          let term;
+          if (sol[vv] !== undefined && vv !== v) {
+            const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
+            const vStr = frac(sol[vv]);
+            term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
+          } else {
+            const absC = Math.abs(c);
+            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+            term = cStr + vv;
+          }
+          if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
+          else subLine += (c < 0 ? ' − ' : ' + ') + term;
         }
-      }
-      out.push(`    ${simpLine} = ${frac(row.rhs)}`);
+        out.push(`    ${subLine} = ${frac(row.rhs)}`);
 
-      const rhsAfter = row.rhs - sumNon;
-      if (Math.abs(cT - 1) > 1e-10) out.push(`    ${frac(cT)}${targetVar} = ${frac(rhsAfter)}`);
-      out.push(`    ${targetVar} = ${frac(rhsAfter / cT)}`);
-      out.push('');
-      sol[targetVar] = rhsAfter / cT;
+        let simpLine = '', first2 = true, sumOther = 0;
+        for (const vv of vars) {
+          const c = row.coef[vv] || 0;
+          if (Math.abs(c) < 1e-10) continue;
+          if (vv === v) {
+            const absC = Math.abs(c);
+            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+            if (first2) { simpLine += (c < 0 ? '−' : '') + cStr + vv; first2 = false; }
+            else simpLine += (c < 0 ? ' − ' : ' + ') + cStr + vv;
+          } else if (sol[vv] !== undefined) {
+            const prod = c * sol[vv];
+            sumOther += prod;
+            const term = frac(Math.abs(prod));
+            if (first2) { simpLine += (prod < 0 ? '−' : '') + term; first2 = false; }
+            else simpLine += (prod < 0 ? ' − ' : ' + ') + term;
+          }
+        }
+        if (sumOther !== 0) out.push(`    ${simpLine} = ${frac(row.rhs)}`);
+
+        const cV = row.coef[v];
+        if (Math.abs(cV - 1) > 1e-10) out.push(`    ${frac(cV)}${v} = ${frac(rhsAfter)}`);
+        out.push(`    ${v} = ${frac(val)}`);
+        out.push('');
+
+        found = true;
+        break;
+      }
+      if (!found) break;
     }
 
     out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
@@ -575,7 +557,6 @@
   async function run() {
     let text = problemText();
 
-    // if no equation found and there are images, OCR them
     const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
     if (!eqFound) {
       const imgText = await ocrImages();
@@ -606,7 +587,7 @@
   }
 
   // ============================================================
-  // MENU (right-click)
+  // MENU
   // ============================================================
   function openMenu() {
     const old = document.getElementById('__dm_menu'); if (old) old.remove();
@@ -638,7 +619,6 @@
     if (!CONFIG.SELF_UPDATE_URL) { showToast('no SELF_UPDATE_URL set'); return; }
     try {
       const t = await (await fetch(CONFIG.SELF_UPDATE_URL)).text();
-      // wipe current instance and eval new
       window.__dm3 = 0;
       document.querySelectorAll('#__dm_modal,#__dm_menu,#__dm_toast').forEach(n => n.remove());
       [...document.querySelectorAll('div')].forEach(d => {
