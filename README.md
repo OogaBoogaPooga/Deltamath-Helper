@@ -10,7 +10,7 @@ No app to install. No extensions. Just paste one line into your browser and clic
 
 **Step 1.** Open your DeltaMath problem like normal.
 
-**Step 2.** Press `F12` on your keyboard to open the console. (On Mac, press `Cmd + Option + I`.)
+**Step 2.** Press `F12` on your keyboard to open the console. (On Chromebook, press `Ctrl + shift + I`.)
 
 **Step 3.** Click the **Console** tab at the top.
 
