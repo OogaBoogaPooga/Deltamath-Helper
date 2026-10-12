@@ -310,8 +310,11 @@
         const newLabel = String(counter);
 
         out.push(sameSign ? `  Subtract (${A.label}) from (${B.label}):` : `  Add the two equations:`);
-        const sign = sameSign ? '−' : '+';
-        out.push(`    (${fmtEq(A2, vars)}) ${sign} (${fmtEq(B2, vars)})`);
+        if (sameSign) {
+        out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
+        } else {
+        out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
+        }
         out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
         out.push('');
 
