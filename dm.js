@@ -10,7 +10,7 @@
   // CONFIG
   // ============================================================
   const CONFIG = {
-    LOGO_URL: 'dm.png',
+    LOGO_URL: 'delta.png',
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
   };
