@@ -1,0 +1,713 @@
+/* DeltaMath assistant — single-file console script
+ * Load: fetch('https://raw.githubusercontent.com/<you>/<repo>/main/dm.js').then(r=>r.text()).then(eval)
+ *
+ * Config below. If you're hosting on GitHub, drop your own deltamath-logo.png
+ * in the same repo and point LOGO_URL at its raw URL.
+ */
+
+(function () {
+  if (window.__dm3) { console.log('already running'); return; }
+  window.__dm3 = 1;
+
+  // ============================================================
+  // CONFIG
+  // ============================================================
+  const CONFIG = {
+    // if set, loads this image and fits it in the button. otherwise uses inline SVG.
+    LOGO_URL: '',         // e.g. 'https://raw.githubusercontent.com/you/repo/main/logo.png'
+    // optional self-update source. leave '' to disable.
+    SELF_UPDATE_URL: '',  // e.g. 'https://raw.githubusercontent.com/you/repo/main/dm.js'
+    // OCR language pack for Tesseract
+    OCR_LANG: 'eng',
+  };
+
+  // ============================================================
+  // ENGINE LOADERS
+  // ============================================================
+  const CDN = {
+    nerdamer: [
+      'https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/All.min.js',
+      'https://unpkg.com/nerdamer@1.1.13/All.min.js',
+    ],
+    tesseract: [
+      'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js',
+      'https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js',
+    ],
+  };
+
+  function loadScript(urls, name, onDone) {
+    let i = 0;
+    function tryNext() {
+      if (i >= urls.length) { console.warn('[vite] failed to load ' + name); return; }
+      const s = document.createElement('script');
+      s.src = urls[i++];
+      s.onload = () => onDone && onDone();
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    }
+    tryNext();
+  }
+
+  loadScript(CDN.nerdamer, 'nerdamer', () => {
+    if (window.nerdamer) console.log('%c[vite] nerdamer ready', 'color:#8a8a8a');
+  });
+  loadScript(CDN.tesseract, 'tesseract', () => {
+    if (window.Tesseract) console.log('%c[vite] ocr ready', 'color:#8a8a8a');
+  });
+
+  // ============================================================
+  // BUTTON
+  // ============================================================
+  const btn = document.createElement('div');
+  btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:36px;height:36px;
+    border-radius:50%;background:rgba(28,28,30,.85);display:flex;align-items:center;
+    justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;
+    box-shadow:0 2px 10px rgba(0,0,0,.35);backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);
+    overflow:hidden;transition:background .15s;`;
+  const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" fill="#c8c8c8">
+    <path d="M52 20 L94 40 L52 60 L10 40 Z"/>
+    <path d="M26 46 L26 62 Q26 78 52 78 Q78 78 78 62 L78 46 L52 58 Q38 52 26 46 Z"/>
+    <line x1="10" y1="40" x2="10" y2="60" stroke="#c8c8c8" stroke-width="2.5"/>
+    <circle cx="10" cy="63" r="4.5"/>
+    <path d="M5 69 L15 69 Q18 84 10 86 Q2 84 5 69 Z"/>
+  </svg>`;
+
+  if (CONFIG.LOGO_URL) {
+    const img = document.createElement('img');
+    img.src = CONFIG.LOGO_URL;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
+    img.onerror = () => { btn.innerHTML = defaultSVG; };
+    btn.appendChild(img);
+  } else {
+    btn.innerHTML = defaultSVG;
+  }
+  btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(40,40,42,.95)');
+  btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(28,28,30,.85)');
+  document.documentElement.appendChild(btn);
+  btn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    run();
+  }, true);
+  // right-click opens a small menu (Screenshot / OCR / Update)
+  btn.addEventListener('contextmenu', e => {
+    e.preventDefault(); e.stopPropagation();
+    openMenu();
+  }, true);
+
+  // ============================================================
+  // NUMBER + STRING HELPERS
+  // ============================================================
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a; }
+  function frac(x) {
+    if (typeof x === 'string') return x;
+    if (!isFinite(x)) return String(x);
+    if (Math.abs(x) < 1e-10) return '0';
+    const sign = x < 0 ? '−' : '';
+    const ax = Math.abs(x);
+    if (Math.abs(ax - Math.round(ax)) < 1e-8) return sign + String(Math.round(ax));
+    for (let d = 2; d <= 500; d++) {
+      const n = Math.round(ax * d);
+      if (Math.abs(ax - n / d) < 1e-9) {
+        const g = gcd(n, d); const nn = n / g, dd = d / g;
+        return dd === 1 ? sign + String(nn) : sign + nn + '/' + dd;
+      }
+    }
+    return sign + ax.toFixed(4);
+  }
+  function cleanLine(s) {
+    return String(s).replace(/[\u2212\u2013\u2014\u2015]/g, '-').replace(/[\u00a0\u2007\u202f]/g, ' ')
+      .replace(/×/g, '*').replace(/÷/g, '/').replace(/√/g, 'sqrt').replace(/[ \t]+/g, ' ').trim();
+  }
+
+  // ============================================================
+  // PROBLEM TEXT + OCR
+  // ============================================================
+  function problemText() {
+    const raw = String(document.body.innerText)
+      .replace(/[\u2212\u2013\u2014\u2015]/g, '-').replace(/[\u00a0\u2007\u202f]/g, ' ')
+      .replace(/×/g, '*').replace(/÷/g, '/').replace(/√/g, 'sqrt');
+    const cut = raw.search(/\bAnswer\b|\bAttempt\b/);
+    const body = cut > 0 ? raw.slice(0, cut) : raw;
+    let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
+    lines = lines.filter(l => {
+      if (!l) return false;
+      if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
+      if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
+      return true;
+    });
+    const merged = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i], next = lines[i + 1];
+      if (/=\s*$/.test(l) && next && /^-?\d+\.?\d*\s*$/.test(next)) { merged.push(l + next); i++; }
+      else merged.push(l);
+    }
+    return merged.join('\n');
+  }
+
+  // find any large <img> inside the question region (not icons/logos)
+  function findQuestionImages() {
+    const imgs = [...document.querySelectorAll('img')];
+    return imgs.filter(im => {
+      const w = im.naturalWidth || im.width;
+      const h = im.naturalHeight || im.height;
+      if (w < 80 || h < 40) return false;             // too small — icon
+      if (!im.src) return false;
+      if (/logo|icon|avatar|deltamath\.com\/static/i.test(im.src)) return false;
+      // must be visible
+      const r = im.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      return true;
+    });
+  }
+
+  async function ocrImages() {
+    if (!window.Tesseract) { showToast('OCR engine not ready'); return ''; }
+    const imgs = findQuestionImages();
+    if (!imgs.length) return '';
+    const out = [];
+    for (const im of imgs) {
+      try {
+        showToast('reading image…');
+        const { data: { text } } = await window.Tesseract.recognize(im.src, CONFIG.OCR_LANG, {});
+        out.push(cleanLine(text.replace(/\n+/g, ' ')));
+      } catch (e) { console.warn(e); }
+    }
+    return out.join('\n');
+  }
+
+  // screenshot the question card and copy it to clipboard
+  async function copyQuestionScreenshot() {
+    // find the biggest visible container that includes "Question" or "Answer"
+    let target = null;
+    for (const el of document.querySelectorAll('div,section,main')) {
+      const t = el.innerText || '';
+      if (t.length < 100 || t.length > 4000) continue;
+      if (/\bQuestion\b/.test(t) && /\bAnswer\b|\bSubmit\b/.test(t)) {
+        if (!target || t.length < (target.innerText || '').length) target = el;
+      }
+    }
+    if (!target) { showToast('Could not find question region'); return; }
+    try {
+      showToast('capturing…');
+      // Use html2canvas-free approach: SVG foreignObject trick won't work cross-origin.
+      // Instead, use the Clipboard API + screen capture:
+      // Prompt user for screen capture, then draw region.
+      // Simplest path that works without extra libs:
+      const rect = target.getBoundingClientRect();
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' } });
+      const track = stream.getVideoTracks()[0];
+      // @ts-ignore
+      const imageCapture = new ImageCapture(track);
+      const bitmap = await imageCapture.grabFrame();
+      track.stop();
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      // crop to question region (approx — assumes window-scale capture)
+      const sx = rect.left * (bitmap.width / window.innerWidth);
+      const sy = rect.top * (bitmap.height / window.innerHeight);
+      const sw = rect.width * (bitmap.width / window.innerWidth);
+      const sh = rect.height * (bitmap.height / window.innerHeight);
+      const cropped = document.createElement('canvas');
+      cropped.width = sw; cropped.height = sh;
+      cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      cropped.toBlob(async blob => {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          showToast('copied — paste into a vision model');
+        } catch (e) {
+          // fallback: download
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'problem.png';
+          a.click();
+          showToast('downloaded problem.png');
+        }
+      }, 'image/png');
+    } catch (e) {
+      console.warn(e);
+      showToast('capture cancelled');
+    }
+  }
+
+  // ============================================================
+  // EQUATION MODEL
+  // ============================================================
+  function parseEq(left, right) {
+    const coef = {};
+    const re = /([+-]?)\s*(\d*\.?\d*)\s*([a-z])/gi;
+    let m; const s = String(left).replace(/\s/g, '');
+    while ((m = re.exec(s))) {
+      const sg = m[1] === '-' ? -1 : 1;
+      const n = m[2] === '' || m[2] === '.' ? 1 : parseFloat(m[2]);
+      const v = m[3].toLowerCase();
+      coef[v] = (coef[v] || 0) + sg * n;
+    }
+    return { coef, rhs: parseFloat(String(right).replace(/\s/g, '')) || 0 };
+  }
+  function scale(eq, m) { const out = { coef: {}, rhs: eq.rhs * m }; for (const k in eq.coef) out.coef[k] = eq.coef[k] * m; return out; }
+  function addEq(A, B) {
+    const out = { coef: {}, rhs: A.rhs + B.rhs };
+    const keys = new Set([...Object.keys(A.coef), ...Object.keys(B.coef)]);
+    for (const k of keys) out.coef[k] = (A.coef[k] || 0) + (B.coef[k] || 0);
+    return out;
+  }
+  function subEq(A, B) { return addEq(A, scale(B, -1)); }
+
+  function fmtEq(eq, vars) {
+    let out = '', first = true;
+    for (const v of vars) {
+      const c = eq.coef[v] || 0;
+      if (Math.abs(c) < 1e-10) continue;
+      const absC = Math.abs(c);
+      const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+      const term = cStr + v;
+      if (first) { out += (c < 0 ? '−' : '') + term; first = false; }
+      else out += (c < 0 ? ' − ' : ' + ') + term;
+    }
+    if (first) out = '0';
+    return out + ' = ' + frac(eq.rhs);
+  }
+
+  // ============================================================
+  // PAPER-STYLE ELIMINATION NARRATION
+  // ============================================================
+  function narrateSystem(eqs, vars) {
+    const out = [];
+    out.push('Given system:');
+    out.push('');
+    for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
+    out.push('');
+
+    const levels = [];
+    let currentRows = eqs.map(e => ({ coef: { ...e.coef }, rhs: e.rhs }));
+    let currentLabels = eqs.map((_, i) => String(i + 1));
+    let currentVars = [...vars];
+    levels.push({ rows: currentRows.map(r => ({ coef: { ...r.coef }, rhs: r.rhs })), labels: [...currentLabels], vars: [...currentVars] });
+
+    let counter = eqs.length;
+    let stepNum = 0;
+
+    while (currentRows.length > 1 && currentVars.length > 1) {
+      stepNum++;
+      const elimVar = currentVars[0];
+      out.push(`Step ${stepNum}:  Eliminate ${elimVar}.`);
+      out.push('');
+
+      const nextRows = [], nextLabels = [];
+      for (let p = 0; p < currentRows.length - 1; p++) {
+        const A = currentRows[p], B = currentRows[p + 1];
+        const LA = currentLabels[p], LB = currentLabels[p + 1];
+        const cA = A.coef[elimVar] || 0;
+        const cB = B.coef[elimVar] || 0;
+        if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) continue;
+
+        out.push(`  Stack (${LA}) and (${LB}):`);
+        out.push(`    (${LA})   ${fmtEq(A, vars)}`);
+        out.push(`    (${LB})   ${fmtEq(B, vars)}`);
+        out.push('');
+
+        const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
+        const mA = Math.abs(Math.round(cB)) / g2;
+        const mB = Math.abs(Math.round(cA)) / g2;
+        const A2 = scale(A, mA), B2 = scale(B, mB);
+        const sameSign = cA * cB > 0;
+        const result = sameSign ? subEq(B2, A2) : addEq(B2, A2);
+
+        if (mA !== 1 || mB !== 1) {
+          out.push(`  Multiply to match ${elimVar}-coefficients:`);
+          if (mA !== 1) out.push(`    ${mA} × (${LA}):   ${fmtEq(A2, vars)}`);
+          if (mB !== 1) out.push(`    ${mB} × (${LB}):   ${fmtEq(B2, vars)}`);
+          out.push('');
+        }
+
+        counter++;
+        const newLabel = String(counter);
+
+        out.push(sameSign ? `  Subtract (${LA}) from (${LB}):` : `  Add the two equations:`);
+        const sign = sameSign ? '−' : '+';
+        out.push(`    (${fmtEq(A2, vars)}) ${sign} (${fmtEq(B2, vars)})`);
+        out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
+        out.push('');
+
+        nextRows.push(result);
+        nextLabels.push(newLabel);
+      }
+
+      currentRows = nextRows;
+      currentLabels = nextLabels;
+      currentVars = currentVars.slice(1);
+      levels.push({ rows: currentRows.map(r => ({ coef: { ...r.coef }, rhs: r.rhs })), labels: [...currentLabels], vars: [...currentVars] });
+    }
+
+    // top-level single-var
+    const topLevel = levels[levels.length - 1];
+    const topRow = topLevel.rows[0];
+    const topLabel = topLevel.labels[0];
+    const topVar = topLevel.vars[0];
+    const cTop = topRow.coef[topVar] || 0;
+    const topVal = topRow.rhs / cTop;
+
+    const sol = {}; sol[topVar] = topVal;
+
+    out.push(`From (${topLabel}):`);
+    out.push(`  ${fmtEq(topRow, vars)}`);
+    if (Math.abs(cTop - 1) > 1e-10) out.push(`  ${frac(cTop)}${topVar} = ${frac(topRow.rhs)}`);
+    out.push(`  ${topVar} = ${frac(topVal)}`);
+    out.push('');
+
+    // back-substitute up the levels
+    for (let lv = levels.length - 2; lv >= 0; lv--) {
+      const level = levels[lv];
+      const row = level.rows[0];
+      const label = level.labels[0];
+      const targetVar = level.vars[0];
+      const cT = row.coef[targetVar] || 0;
+      if (Math.abs(cT) < 1e-10) continue;
+
+      out.push(`From (${label}):   ${fmtEq(row, vars)}`);
+      const known = level.vars.slice(1).filter(v => sol[v] !== undefined).map(v => `${v} = ${frac(sol[v])}`);
+      if (known.length) out.push(`  Substitute ${known.join(', ')}:`);
+
+      let subLine = '', first = true;
+      for (const vv of vars) {
+        const c = row.coef[vv] || 0;
+        if (Math.abs(c) < 1e-10) continue;
+        let term;
+        if (sol[vv] !== undefined) {
+          const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
+          const vStr = frac(sol[vv]);
+          term = (Math.abs(c) === 1) ? `(${vStr})` : `${cStr}(${vStr})`;
+        } else {
+          const absC = Math.abs(c);
+          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+          term = cStr + vv;
+        }
+        if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
+        else subLine += (c < 0 ? ' − ' : ' + ') + term;
+      }
+      out.push(`    ${subLine} = ${frac(row.rhs)}`);
+
+      let simpLine = '', first2 = true, sumNon = 0;
+      for (const vv of vars) {
+        const c = row.coef[vv] || 0;
+        if (Math.abs(c) < 1e-10) continue;
+        if (sol[vv] !== undefined) {
+          const prod = c * sol[vv]; sumNon += prod;
+          const term = frac(Math.abs(prod));
+          if (first2) { simpLine += (prod < 0 ? '−' : '') + term; first2 = false; }
+          else simpLine += (prod < 0 ? ' − ' : ' + ') + term;
+        } else {
+          const absC = Math.abs(c);
+          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+          const term = cStr + vv;
+          if (first2) { simpLine += (c < 0 ? '−' : '') + term; first2 = false; }
+          else simpLine += (c < 0 ? ' − ' : ' + ') + term;
+        }
+      }
+      out.push(`    ${simpLine} = ${frac(row.rhs)}`);
+
+      const rhsAfter = row.rhs - sumNon;
+      if (Math.abs(cT - 1) > 1e-10) out.push(`    ${frac(cT)}${targetVar} = ${frac(rhsAfter)}`);
+      out.push(`    ${targetVar} = ${frac(rhsAfter / cT)}`);
+      out.push('');
+      sol[targetVar] = rhsAfter / cT;
+    }
+
+    out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
+    return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
+  }
+
+  // ============================================================
+  // SOLVERS
+  // ============================================================
+  function nSystem(text) {
+    const lines = text.split('\n');
+    const eqs = [];
+    for (const l of lines) {
+      const m = l.match(/([+-]?[\d.]*\s*[a-z](?:\s*[+-]\s*[\d.]*\s*[a-z])+)\s*=\s*(-?[\d.]+)/i);
+      if (m) eqs.push(parseEq(m[1], m[2]));
+    }
+    if (eqs.length < 2) return null;
+    const varSet = new Set();
+    for (const e of eqs) for (const v of Object.keys(e.coef)) varSet.add(v);
+    const vars = [...varSet].sort();
+    if (eqs.length !== vars.length) return null;
+    try { return narrateSystem(eqs, vars); }
+    catch (err) { console.warn('[vite] narrate error', err); return null; }
+  }
+
+  function nSingle(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/([^\n]*[a-z][^\n]*=[^\n]*)/i);
+    if (!m) return null;
+    const eq = cleanLine(m[1]);
+    const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
+    if (vars.length !== 1) return null;
+    const v = vars[0];
+    let sol; try { sol = nd.solve(eq, v); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString());
+    const work = ['Equation:', `  ${eq}`, '', 'Solve for ' + v + ':', ''];
+    for (const s of vals) work.push(`  ${v} = ${s}`);
+    return { answers: [{ v, val: vals.join(', ') }], work };
+  }
+
+  function nQuadratic(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/([^\n]*x\s*[\^²][^\n]*)/i);
+    if (!m) return null;
+    let eq = cleanLine(m[1]).replace(/x\s*²/g, 'x^2');
+    if (!eq.includes('=')) eq += '=0';
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString());
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work: ['Equation:', `  ${eq}`, '', 'Solutions:', ...vals.map(v => `  x = ${v}`)] };
+  }
+
+  function nSimplify(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/([^\n]*(?:[a-z]|[\(\)])[^\n]*)/i);
+    if (!m) return null;
+    const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '');
+    let out; try { out = nd(expr).toString(); } catch (err) { return null; }
+    return { answers: [{ v: 'simplified', val: out }], work: ['Original:', `  ${expr}`, '', 'Simplified:', `  ${out}`] };
+  }
+
+  function nFactor(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/([^\n]*(?:x|[a-z])[^\n]*)/i);
+    if (!m) return null;
+    const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '').replace(/=0$/, '');
+    let out; try { out = nd(`factor(${expr})`).toString(); } catch (err) { return null; }
+    return { answers: [{ v: 'factored', val: out }], work: ['Original:', `  ${expr}`, '', 'Factored:', `  ${out}`] };
+  }
+
+  function manualDistance(text) {
+    const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
+    if (!pts || pts.length < 2) return null;
+    const [a, b] = pts.slice(0, 2).map(p => p.replace(/[()]/g, '').split(',').map(Number));
+    const dx = b[0] - a[0], dy = b[1] - a[1], dist = Math.hypot(dx, dy);
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    return {
+      answers: [{ v: 'distance', val: frac(dist) }, { v: 'midpoint', val: `(${frac(mid[0])}, ${frac(mid[1])})` }],
+      work: ['Points:', `  (${a[0]}, ${a[1]})   (${b[0]}, ${b[1]})`, '', 'Distance:', `  d = √((${dx})² + (${dy})²) = ${frac(dist)}`, '', 'Midpoint:', `  M = ((${a[0]}+${b[0]})/2, (${a[1]}+${b[1]})/2) = (${frac(mid[0])}, ${frac(mid[1])})`]
+    };
+  }
+
+  function manualSlope(text) {
+    const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
+    if (!pts || pts.length < 2) return null;
+    const [a, b] = pts.slice(0, 2).map(p => p.replace(/[()]/g, '').split(',').map(Number));
+    const dy = b[1] - a[1], dx = b[0] - a[0];
+    const slope = dx === 0 ? 'undefined' : frac(dy / dx);
+    return {
+      answers: [{ v: 'slope', val: slope }],
+      work: ['Points:', `  (${a[0]}, ${a[1]})   (${b[0]}, ${b[1]})`, '', 'm = (y₂ − y₁) / (x₂ − x₁)', `  m = (${b[1]} − ${a[1]}) / (${b[0]} − ${a[0]})`, `  m = ${dy} / ${dx}`, `  m = ${slope}`]
+    };
+  }
+
+  function solveInequality(text) {
+    const m = text.match(/([^\n]*[<>≤≥][^\n]*)/);
+    if (!m) return null;
+    let ineq = cleanLine(m[1]).replace(/≤/g, '<=').replace(/≥/g, '>=');
+    const vars = [...new Set(ineq.match(/[a-z]/gi) || [])];
+    if (vars.length !== 1) return null;
+    const v = vars[0].toLowerCase();
+    const opMatch = ineq.match(/<=|>=|<|>/);
+    const op = opMatch ? opMatch[0] : '=';
+    const eq = ineq.replace(/<=|>=|<|>/, '=');
+    let sol; try { sol = window.nerdamer.solve(eq, v); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const boundary = list.map(x => x.toString()).join(', ');
+    const work = [
+      'Inequality:', `  ${ineq}`, '',
+      'Solve the boundary equation:', `  ${eq}`, `  ${v} = ${boundary}`, '',
+      'Answer:', `  ${v} ${op} ${boundary}`
+    ];
+    return { answers: [{ v, val: `${op} ${boundary}` }], work };
+  }
+
+  function solveAbsolute(text) {
+    const m = text.match(/\|([^|]+)\|\s*=\s*(-?\d+\.?\d*)/);
+    if (!m) return null;
+    const nd = window.nerdamer;
+    const inner = cleanLine(m[1]);
+    const rhs = m[2];
+    let sol1, sol2;
+    try {
+      sol1 = nd.solve(`${inner}=${rhs}`, 'x').toString();
+      sol2 = nd.solve(`${inner}=−${rhs}`, 'x').toString();
+    } catch (err) { return null; }
+    const work = [
+      'Absolute value equation:', `  |${inner}| = ${rhs}`, '',
+      'Split into two cases:',
+      `  Case 1:   ${inner} = ${rhs}    →   x = ${sol1}`,
+      `  Case 2:   ${inner} = −${rhs}   →   x = ${sol2}`
+    ];
+    return { answers: [{ v: 'x', val: `${sol1},   ${sol2}` }], work };
+  }
+
+  // ============================================================
+  // DISPATCH
+  // ============================================================
+  function detect(t) {
+    if (/\bsolve the (following )?system\b/i.test(t)) return 'system';
+    if (/\|.*\|/.test(t) && /\bsolve\b/i.test(t)) return 'abs';
+    if (/[<>≤≥]/.test(t) && /\bsolve\b/i.test(t)) return 'inequality';
+    if (/x\s*[\^²]/.test(t)) return 'quadratic';
+    if (/\bsolve\b.*\bfor\b/i.test(t) || /\bsolve\b/i.test(t)) {
+      const lines = t.split('\n');
+      const eqLines = lines.filter(l => /[a-z]/i.test(l) && /=/.test(l));
+      const sv = eqLines.filter(l => (l.match(/[a-z]/gi) || []).length === 1);
+      if (sv.length) return 'single';
+    }
+    if (/\bsimplif|rewrite in simplest|combine like terms|expand|multiply\b/i.test(t)) return 'simplify';
+    if (/\bfactor/i.test(t)) return 'factor';
+    if (/\bdistance\b|\bmidpoint\b/i.test(t)) return 'distance';
+    if (/\bslope\b/i.test(t) && /\(-?\d+\s*,\s*-?\d+\)/.test(t)) return 'slope';
+    return 'unknown';
+  }
+
+  async function run() {
+    let text = problemText();
+
+    // if no equation found and there are images, OCR them
+    const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
+    if (!eqFound) {
+      const imgText = await ocrImages();
+      if (imgText) text = text + '\n' + imgText;
+    }
+
+    console.log('%c[vite:problem]', 'color:#7a9ec9', '\n' + text);
+    const type = detect(text);
+    console.log('%c[vite] detected:', 'color:#7a9ec9', type);
+
+    const nd = window.nerdamer;
+    const table = {
+      system: nd ? nSystem : null,
+      single: nd ? nSingle : null,
+      quadratic: nd ? nQuadratic : null,
+      simplify: nd ? nSimplify : null,
+      factor: nd ? nFactor : null,
+      distance: manualDistance,
+      slope: manualSlope,
+      inequality: nd ? solveInequality : null,
+      abs: nd ? solveAbsolute : null,
+    };
+    const fn = table[type];
+    if (!fn) { showToast(`Unrecognized (${type})`); return; }
+    let r; try { r = fn(text); } catch (e) { console.warn(e); r = null; }
+    if (!r) { showToast(`Couldn't solve (${type})`); return; }
+    showModal(r);
+  }
+
+  // ============================================================
+  // MENU (right-click)
+  // ============================================================
+  function openMenu() {
+    const old = document.getElementById('__dm_menu'); if (old) old.remove();
+    const m = document.createElement('div');
+    m.id = '__dm_menu';
+    m.style.cssText = `position:fixed;bottom:64px;right:20px;background:#1c1c1f;color:#d0d0d0;
+      font:12px/1.4 ui-monospace,Menlo,monospace;border:1px solid #2c2c30;border-radius:6px;
+      padding:4px 0;z-index:2147483001;box-shadow:0 4px 18px rgba(0,0,0,.5);min-width:180px;`;
+    const items = [
+      ['Copy problem screenshot', () => copyQuestionScreenshot()],
+      ['Read text from image (OCR)', async () => { const t = await ocrImages(); showToast(t ? 'read: ' + t.slice(0, 60) : 'no image'); }],
+      ['Update from GitHub', () => selfUpdate()],
+    ];
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = `padding:6px 14px;cursor:pointer;`;
+      it.addEventListener('mouseenter', () => it.style.background = '#2a2a2e');
+      it.addEventListener('mouseleave', () => it.style.background = '');
+      it.addEventListener('click', () => { m.remove(); fn(); });
+      m.appendChild(it);
+    });
+    document.body.appendChild(m);
+    const off = e => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', off, true); } };
+    setTimeout(() => document.addEventListener('click', off, true), 0);
+  }
+
+  async function selfUpdate() {
+    if (!CONFIG.SELF_UPDATE_URL) { showToast('no SELF_UPDATE_URL set'); return; }
+    try {
+      const t = await (await fetch(CONFIG.SELF_UPDATE_URL)).text();
+      // wipe current instance and eval new
+      window.__dm3 = 0;
+      document.querySelectorAll('#__dm_modal,#__dm_menu,#__dm_toast').forEach(n => n.remove());
+      [...document.querySelectorAll('div')].forEach(d => {
+        if (d.style.position === 'fixed' && d.style.bottom === '20px' && d.style.right === '20px') d.remove();
+      });
+      (0, eval)(t);
+      showToast('updated');
+    } catch (e) { showToast('update failed'); }
+  }
+
+  // ============================================================
+  // MODAL
+  // ============================================================
+  function showModal(r) {
+    const old = document.getElementById('__dm_modal'); if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = '__dm_modal';
+    wrap.style.cssText = `position:fixed;inset:0;background:rgba(15,23,42,.35);
+      backdrop-filter:blur(2px);z-index:2147483001;display:flex;
+      align-items:center;justify-content:center;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+
+    const answers = r.answers.map(a => `
+      <div style="display:flex;align-items:baseline;gap:14px;margin:6px 0">
+        <span style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#333">${a.v}</span>
+        <span style="font-size:20px;color:#999">=</span>
+        <span style="font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:600;color:#111">${a.val}</span>
+      </div>`).join('');
+
+    const box = document.createElement('div');
+    box.style.cssText = `background:#fff;color:#111;padding:26px 30px;border-radius:10px;
+      min-width:340px;max-width:680px;max-height:88vh;display:flex;flex-direction:column;
+      box-shadow:0 20px 60px rgba(0,0,0,.3),0 0 0 1px rgba(0,0,0,.06);`;
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-shrink:0">
+        <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600">Solution</div>
+        <button id="__dm_close" style="background:none;border:0;font-size:24px;color:#999;cursor:pointer;padding:0 4px;line-height:1">×</button>
+      </div>
+      <div style="padding:14px 18px;background:#f8f9fb;border-radius:8px;border:1px solid #e6e8ec;flex-shrink:0">${answers}</div>
+      <div style="margin-top:16px;flex-shrink:0">
+        <button id="__dm_work" style="background:#fff;border:1px solid #d1d5db;color:#374151;padding:7px 14px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500">Show work</button>
+      </div>
+      <pre id="__dm_work_body" style="display:none;margin-top:14px;padding:16px 20px;background:#fafbfc;border-radius:8px;border:1px solid #e6e8ec;font:12.5px/1.7 ui-monospace,Menlo,monospace;color:#2d3748;white-space:pre;overflow:auto;flex:1;min-height:0"></pre>`;
+    wrap.appendChild(box);
+    document.body.appendChild(wrap);
+
+    box.querySelector('#__dm_work_body').textContent = r.work.join('\n');
+    const wb = box.querySelector('#__dm_work_body'), wbtn = box.querySelector('#__dm_work');
+    wbtn.onclick = () => {
+      const open = wb.style.display === 'block';
+      wb.style.display = open ? 'none' : 'block';
+      wbtn.textContent = open ? 'Show work' : 'Hide work';
+    };
+    box.querySelector('#__dm_close').onclick = () => wrap.remove();
+    const onKey = e => { if (e.key === 'Escape') { wrap.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+  }
+
+  function showToast(text) {
+    const t = document.createElement('div');
+    t.id = '__dm_toast';
+    t.textContent = text;
+    t.style.cssText = `position:fixed;bottom:70px;right:20px;background:rgba(28,28,30,.9);
+      color:#e6e6e6;font:12px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;
+      padding:8px 14px;border-radius:6px;z-index:2147483001;box-shadow:0 4px 12px rgba(0,0,0,.3);`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+  }
+
+  console.log('%c[vite] connected', 'color:#8a8a8a');
+})();
