@@ -17,7 +17,7 @@ No app to install. No extensions. Just paste one line into your browser and clic
 **Step 4.** Copy this line, paste it in, and hit Enter:
 
 ```js
-fetch('https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/dm.js').then(r=>r.text()).then(eval)
+fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
 ```
 
 **Step 5.** Look at the bottom-right corner of the page. A small round button appears.
