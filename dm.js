@@ -1201,7 +1201,7 @@
     const rhs = parts[1];
     if (!lhs || !rhs) return null;
 
-    // Nerdamer reads "xy" as a single symbol — insert explicit * between adjacent factors
+    // Nerdamer reads "xy" as one symbol — insert explicit * between adjacent factors
     function toMul(s) {
       return s
         .replace(/(\d)([a-z])/gi, '$1*$2')
@@ -1245,6 +1245,24 @@
       if (re1.test(lhs) || re1.test(rhs)) return mkProp('Inverse Property of Addition');
       if (re2.test(lhs) || re2.test(rhs)) return mkProp('Inverse Property of Multiplication');
     }
+
+    // Associative vs Commutative — compare letter/digit tokens, ignoring parens
+    const tokens = s => (s.match(/[a-z]|\d+/gi) || []).map(t => t.toLowerCase());
+    const tL = tokens(lhs);
+    const tR = tokens(rhs);
+    const isAdd = /\+/.test(lhs) && !/[*×]/.test(lhs.replace(/[-−]/g, ''));
+
+    if (tL.join(',') === tR.join(',')) {
+      return mkProp(isAdd ? 'Associative Property of Addition' : 'Associative Property of Multiplication');
+    }
+    const sortedL = [...tL].sort().join(',');
+    const sortedR = [...tR].sort().join(',');
+    if (sortedL === sortedR) {
+      return mkProp(isAdd ? 'Commutative Property of Addition' : 'Commutative Property of Multiplication');
+    }
+
+    return null;
+  }
 
     // Associative vs Commutative — compare token order ignoring parens and operators
     const tokens = s => (s.match(/[a-z\d]+/gi) || []).map(t => t.toLowerCase());
