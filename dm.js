@@ -8,7 +8,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    AI_MODEL: 'gemini-flash-latest',
+    AI_MODEL: 'gemini-2.5-flash',
     OWNER_WEBHOOK: '',
   };
 
