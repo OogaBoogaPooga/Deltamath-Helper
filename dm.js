@@ -10,8 +10,7 @@
   // CONFIG
   // ============================================================
   const CONFIG = {
-    LOGO_URL: 'delta.png',
-    SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
+    SELF_UPDATE_URL: '',
     OCR_LANG: 'eng',
   };
 
@@ -58,24 +57,14 @@
     justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;
     box-shadow:0 2px 10px rgba(0,0,0,.35);backdrop-filter:blur(8px);
     -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);
-    overflow:hidden;transition:background .15s;`;
-  const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" fill="#c8c8c8">
-    <path d="M52 20 L94 40 L52 60 L10 40 Z"/>
-    <path d="M26 46 L26 62 Q26 78 52 78 Q78 78 78 62 L78 46 L52 58 Q38 52 26 46 Z"/>
-    <line x1="10" y1="40" x2="10" y2="60" stroke="#c8c8c8" stroke-width="2.5"/>
-    <circle cx="10" cy="63" r="4.5"/>
-    <path d="M5 69 L15 69 Q18 84 10 86 Q2 84 5 69 Z"/>
+    transition:background .15s;`;
+  btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="22" height="22" fill="#c8c8c8">
+    <path d="M32 12 L58 24 L32 36 L6 24 Z"/>
+    <path d="M18 30 L18 40 Q18 48 32 51 Q46 48 46 40 L46 30 L42 32 L42 40 Q42 44 32 46 Q22 44 22 40 L22 32 Z"/>
+    <line x1="6" y1="24" x2="6" y2="36" stroke="#c8c8c8" stroke-width="1.6"/>
+    <circle cx="6" cy="38" r="2.6"/>
+    <path d="M3 42 L9 42 Q11 51 6 53 Q1 51 3 42 Z"/>
   </svg>`;
-
-  if (CONFIG.LOGO_URL) {
-    const img = document.createElement('img');
-    img.src = CONFIG.LOGO_URL;
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
-    img.onerror = () => { btn.innerHTML = defaultSVG; };
-    btn.appendChild(img);
-  } else {
-    btn.innerHTML = defaultSVG;
-  }
   btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(40,40,42,.95)');
   btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(28,28,30,.85)');
   document.documentElement.appendChild(btn);
@@ -311,9 +300,9 @@
 
         out.push(sameSign ? `  Subtract (${A.label}) from (${B.label}):` : `  Add the two equations:`);
         if (sameSign) {
-        out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
+          out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
         } else {
-        out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
+          out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
         }
         out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
         out.push('');
@@ -323,7 +312,7 @@
       rows = nextRows;
     }
 
-    // ---- Solve: iteratively pick any equation with exactly one unknown ----
+    // ---- Solve ----
     const sol = {};
     const allRows = [
       ...rows,
@@ -338,61 +327,81 @@
         if (unknowns.length !== 1) continue;
 
         const v = unknowns[0];
-        let rhsAfter = row.rhs;
+        const cV = row.coef[v];
+
         const knownSubs = [];
+        let sumKnown = 0;
         for (const other of vars) {
           if (other === v) continue;
           if (sol[other] !== undefined) {
-            rhsAfter -= (row.coef[other] || 0) * sol[other];
             knownSubs.push(`${other} = ${frac(sol[other])}`);
+            sumKnown += (row.coef[other] || 0) * sol[other];
           }
         }
-        const val = rhsAfter / row.coef[v];
+        const rhsAfter = row.rhs - sumKnown;
+        const val = rhsAfter / cV;
         sol[v] = val;
 
         out.push(`From (${row.label}):   ${fmtEq(row, vars)}`);
-        if (knownSubs.length > 0) out.push(`  Substitute ${knownSubs.join(', ')}:`);
 
-        let subLine = '', first = true;
-        for (const vv of vars) {
-          const c = row.coef[vv] || 0;
-          if (Math.abs(c) < 1e-10) continue;
-          let term;
-          if (sol[vv] !== undefined && vv !== v) {
-            const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
-            const vStr = frac(sol[vv]);
-            term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
-          } else {
-            const absC = Math.abs(c);
-            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-            term = cStr + vv;
+        if (knownSubs.length > 0) {
+          out.push(`  Substitute ${knownSubs.join(', ')}:`);
+
+          let subLine = '', first = true;
+          for (const vv of vars) {
+            const c = row.coef[vv] || 0;
+            if (Math.abs(c) < 1e-10) continue;
+            let term;
+            if (vv !== v && sol[vv] !== undefined) {
+              const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
+              const vStr = frac(sol[vv]);
+              term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
+            } else {
+              const absC = Math.abs(c);
+              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+              term = cStr + vv;
+            }
+            if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
+            else subLine += (c < 0 ? ' − ' : ' + ') + term;
           }
-          if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
-          else subLine += (c < 0 ? ' − ' : ' + ') + term;
-        }
-        out.push(`    ${subLine} = ${frac(row.rhs)}`);
+          out.push(`    ${subLine} = ${frac(row.rhs)}`);
 
-        let simpLine = '', first2 = true, sumOther = 0;
-        for (const vv of vars) {
-          const c = row.coef[vv] || 0;
-          if (Math.abs(c) < 1e-10) continue;
-          if (vv === v) {
-            const absC = Math.abs(c);
+          let evalLine = '', first2 = true;
+          for (const vv of vars) {
+            const c = row.coef[vv] || 0;
+            if (Math.abs(c) < 1e-10) continue;
+            let term, isNeg;
+            if (vv !== v && sol[vv] !== undefined) {
+              const prod = c * sol[vv];
+              term = frac(Math.abs(prod));
+              isNeg = prod < 0;
+            } else {
+              const absC = Math.abs(c);
+              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+              term = cStr + vv;
+              isNeg = c < 0;
+            }
+            if (first2) { evalLine += (isNeg ? '−' : '') + term; first2 = false; }
+            else evalLine += (isNeg ? ' − ' : ' + ') + term;
+          }
+          if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
+
+          if (Math.abs(sumKnown) > 1e-10) {
+            const absC = Math.abs(cV);
             const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-            if (first2) { simpLine += (c < 0 ? '−' : '') + cStr + vv; first2 = false; }
-            else simpLine += (c < 0 ? ' − ' : ' + ') + cStr + vv;
-          } else if (sol[vv] !== undefined) {
-            const prod = c * sol[vv];
-            sumOther += prod;
-            const term = frac(Math.abs(prod));
-            if (first2) { simpLine += (prod < 0 ? '−' : '') + term; first2 = false; }
-            else simpLine += (prod < 0 ? ' − ' : ' + ') + term;
+            const combinedLine = (cV < 0 ? '−' : '') + cStr + v + (sumKnown < 0 ? ' − ' : ' + ') + frac(Math.abs(sumKnown));
+            if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
+          }
+
+          if (Math.abs(cV - 1) > 1e-10) {
+            out.push(`    ${frac(cV)}${v} = ${frac(rhsAfter)}`);
+          }
+        } else {
+          if (Math.abs(cV - 1) > 1e-10) {
+            out.push(`  Divide both sides by ${frac(cV)}:`);
           }
         }
-        if (sumOther !== 0) out.push(`    ${simpLine} = ${frac(row.rhs)}`);
 
-        const cV = row.coef[v];
-        if (Math.abs(cV - 1) > 1e-10) out.push(`    ${frac(cV)}${v} = ${frac(rhsAfter)}`);
         out.push(`    ${v} = ${frac(val)}`);
         out.push('');
 
