@@ -53,22 +53,32 @@
   // ============================================================
   const btn = document.createElement('div');
   btn.style.cssText = `
-    position:fixed;bottom:22px;right:22px;width:42px;height:42px;
-    border-radius:9px;
-    background:#f1f3f5;
+    position:fixed;bottom:20px;right:20px;width:30px;height:30px;
+    border-radius:50%;
+    background:#ffffff;
+    border:1px solid #e5e7eb;
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;
     z-index:2147483000;
-    transition:background .12s ease;`;
+    opacity:.75;
+    transition:opacity .15s ease, background .12s ease, border-color .12s ease;`;
   btn.innerHTML = `
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-         stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+         stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="9"/>
       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
       <line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>`;
-  btn.addEventListener('mouseenter', () => btn.style.background = '#e5e7eb');
-  btn.addEventListener('mouseleave', () => btn.style.background = '#f1f3f5');
+  btn.addEventListener('mouseenter', () => {
+    btn.style.opacity = '1';
+    btn.style.background = '#f9fafb';
+    btn.style.borderColor = '#d1d5db';
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.opacity = '.75';
+    btn.style.background = '#ffffff';
+    btn.style.borderColor = '#e5e7eb';
+  });
   document.documentElement.appendChild(btn);
   btn.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
