@@ -1403,7 +1403,7 @@ Rules:
   function detect(t) {
     if (/\bsolve the (following )?system\b/i.test(t) || /\bby substitution\b/i.test(t) || /\bby elimination\b/i.test(t)) return 'system';
     if (/\bname the property\b/i.test(t) || /\bproperties?\s+of\s+real\s+numbers?\b/i.test(t)) return 'property';
-    if (/\bcompound\s+inequalit/i.test(t) || (-?\d+\.?\d*\s*[<>]=?\s*[^<>\n]+?\s*[<>]=?\s*-?\d+\.?\d*/.test(t) && /solve/i.test(t))) return 'compoundIneq';
+    if (/\bcompound\s+inequalit/i.test(t) || (/-?\d+\.?\d*\s*[<>]=?\s*[^<>\n]+?\s*[<>]=?\s*-?\d+\.?\d*/.test(t) && /solve/i.test(t))) return 'compoundIneq';
     if (/\|\s*[^|]+\s*\|\s*(<=|>=|<|>)/.test(t)) return 'absIneq';
     if (/\|\s*[^|]+\s*\|/.test(t) && /=/.test(t)) return 'absEq';
     if (/\bdirect variation\b/i.test(t) && /when\s+x/i.test(t)) return 'directVarFindY';
