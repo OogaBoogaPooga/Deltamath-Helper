@@ -140,7 +140,7 @@
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
     lines = lines.filter(l => {
       if (!l) return false;
-      if (/^=/.test(l)) return false;
+      if (/^\s*=/.test(l)) return false;
       if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
       if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
       return true;
@@ -221,7 +221,26 @@
       }
     } catch (e) { console.warn(e); showToast('capture failed'); }
   }
-
+  async function screenshotAndOCR() {
+    if (!window.html2canvas || !window.Tesseract) return '';
+    let target = null;
+    for (const el of document.querySelectorAll('div,section,main')) {
+      const t = el.innerText || '';
+      if (t.length < 40 || t.length > 5000) continue;
+      if (/\bQuestion\b/.test(t) && (/\bAnswer\b|\bSubmit\b/.test(t))) {
+        if (!target || t.length < (target.innerText || '').length) target = el;
+      }
+    }
+    if (!target) return '';
+    try {
+      showToast('reading equations…');
+      const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
+      const dataUrl = canvas.toDataURL('image/png');
+      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
+      return cleanLine(text.replace(/\n+/g, ' '));
+    } catch (e) { console.warn('[vite] screenshot+OCR failed', e); return ''; }
+  }
+  
   // EQUATION MODEL
   function parseSideSide(s) {
     const coef = {}; let constVal = 0;
@@ -1685,6 +1704,12 @@ Rules:
     if (!eqFound) {
       const imgText = await ocrImages();
       if (imgText) text = text + '\n' + imgText;
+    }
+    // If still no equations, the math is probably rendered as SVG paths — screenshot+OCR it
+    if (!/[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text)) {
+      console.log('%c[vite] no equations in text — falling back to screenshot+OCR', 'color:#c49a3a');
+      const ssText = await screenshotAndOCR();
+      if (ssText) text = text + '\n' + ssText;
     }
     console.log('%c[vite:problem]', 'color:#7a9ec9', '\n' + text);
     const type = detect(text);
