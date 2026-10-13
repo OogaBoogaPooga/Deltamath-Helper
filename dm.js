@@ -20,12 +20,8 @@
   function getGroqKey() {
     try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; }
   }
-  function setGroqKey(k) {
-    try { localStorage.setItem(KEY_STORAGE, k); } catch {}
-  }
-  function clearGroqKey() {
-    try { localStorage.removeItem(KEY_STORAGE); } catch {}
-  }
+  function setGroqKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch {} }
+  function clearGroqKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
   function promptForKey() {
     const k = window.prompt(
       'Enter your Groq API key.\n\nStored only in this browser (localStorage). Never sent anywhere except api.groq.com.',
@@ -135,12 +131,121 @@
   }
 
   // ============================================================
+  // MATH DOM WALKER — handles MathQuill and KaTeX structures
+  // ============================================================
+  function walkMath(node) {
+    if (!node) return '';
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1) return '';
+
+    const cls = typeof node.className === 'string' ? node.className : '';
+    const tag = (node.tagName || '').toLowerCase();
+
+    // ----- MathQuill -----
+    if (/mq-fraction/.test(cls)) {
+      const num = node.querySelector('.mq-numerator');
+      const den = node.querySelector('.mq-denominator');
+      return '(' + (num ? walkMath(num) : '?') + ')/(' + (den ? walkMath(den) : '?') + ')';
+    }
+    if (/mq-superscript/.test(cls)) {
+      const sup = node.querySelector('.mq-sup');
+      return '^(' + (sup ? walkMath(sup) : '?') + ')';
+    }
+    if (/mq-subscript/.test(cls)) {
+      const sub = node.querySelector('.mq-sub');
+      return '_(' + (sub ? walkMath(sub) : '?') + ')';
+    }
+    if (/mq-sqrt|mq-radical/.test(cls)) {
+      const inner = node.querySelector('.mq-non-leaf, .mq-root-block');
+      return 'sqrt(' + (inner ? walkMath(inner) : '?') + ')';
+    }
+    if (/\bmq-sup\b|\bmq-sub\b|\bmq-numerator\b|\bmq-denominator\b|\bmq-fraction-bar\b|\bmq-cursor\b/.test(cls)) {
+      return '';
+    }
+
+    // ----- KaTeX -----
+    if (/\bkatex\b/.test(cls) && !/katex-mathml|katex-html|katex-display/.test(cls)) {
+      const mml = node.querySelector('.katex-mathml');
+      if (mml) return walkMath(mml);
+      const html = node.querySelector('.katex-html');
+      if (html) return walkMath(html);
+      return '';
+    }
+    if (/katex-html/.test(cls)) {
+      let out = '';
+      for (const c of node.childNodes) out += walkMath(c);
+      return out;
+    }
+    if (/katex-mathml/.test(cls)) {
+      const math = node.querySelector('math');
+      return math ? walkMath(math) : '';
+    }
+
+    // ----- MathML -----
+    if (tag === 'mfrac') {
+      const kids = Array.from(node.children);
+      return '(' + walkMath(kids[0]) + ')/(' + walkMath(kids[1]) + ')';
+    }
+    if (tag === 'msup') {
+      const kids = Array.from(node.children);
+      return walkMath(kids[0]) + '^(' + walkMath(kids[1]) + ')';
+    }
+    if (tag === 'msub') {
+      const kids = Array.from(node.children);
+      return walkMath(kids[0]) + '_(' + walkMath(kids[1]) + ')';
+    }
+    if (tag === 'msqrt') {
+      return 'sqrt(' + Array.from(node.children).map(walkMath).join('') + ')';
+    }
+    if (tag === 'mroot') {
+      const kids = Array.from(node.children);
+      return '(' + walkMath(kids[0]) + ')^(1/(' + walkMath(kids[1]) + '))';
+    }
+    if (tag === 'semantics') {
+      for (const c of node.children) {
+        const t = (c.tagName || '').toLowerCase();
+        if (t === 'annotation' || t === 'annotation-xml') continue;
+        return walkMath(c);
+      }
+      return '';
+    }
+    if (tag === 'annotation' || tag === 'annotation-xml') return '';
+
+    // ----- default -----
+    let out = '';
+    for (const c of node.childNodes) out += walkMath(c);
+    return out;
+  }
+
+  // ============================================================
   // PROBLEM TEXT + OCR
   // ============================================================
   function problemText() {
-    const raw = String(document.body.innerText)
+    // Clone the body so we can safely mutate for text extraction
+    const clone = document.body.cloneNode(true);
+    clone.querySelectorAll('script, style, noscript, link, meta, svg').forEach(n => n.remove());
+
+    // Replace every rendered math element with its reconstructed plain-text form
+    clone.querySelectorAll('.katex, .mq-root-block, math, .MathJax, .MathJax_Preview').forEach(el => {
+      if (!el.parentNode) return; // already replaced by an ancestor pass
+      const txt = walkMath(el);
+      if (txt && txt.trim()) {
+        el.replaceWith(document.createTextNode(' ' + txt + ' '));
+      }
+    });
+
+    // Render offscreen to pick up innerText (respects block layout for the rest of the page)
+    const hidden = document.createElement('div');
+    hidden.style.cssText = 'position:absolute;left:-99999px;top:0;width:1px;height:1px;overflow:hidden;';
+    document.documentElement.appendChild(hidden);
+    hidden.appendChild(clone);
+
+    const raw = String(hidden.innerText)
       .replace(/[\u2212\u2013\u2014\u2015]/g, '-').replace(/[\u00a0\u2007\u202f]/g, ' ')
       .replace(/×/g, '*').replace(/÷/g, '/').replace(/√/g, 'sqrt');
+
+    hidden.remove();
+
     const cut = raw.search(/\bAnswer\b|\bAttempt\b/);
     const body = cut > 0 ? raw.slice(0, cut) : raw;
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
@@ -604,9 +709,6 @@
     return { answers: [{ v: 'x', val: `${sol1},   ${sol2}` }], work };
   }
 
-  // ============================================================
-  // LOG / EXP / RADICAL / RATIONAL / TRIG
-  // ============================================================
   function solveLog(text) {
     const nd = window.nerdamer;
     const m = text.match(/[^\n]*(?:\blog\b|\bln\b)[^\n]*=[^\n]*/i);
@@ -685,9 +787,6 @@
     };
   }
 
-  // ============================================================
-  // SYSTEMS OF INEQUALITIES
-  // ============================================================
   function solveSystemIneq(text) {
     const nd = window.nerdamer;
     const lines = text.split('\n');
@@ -719,9 +818,6 @@
     return { answers: [{ v: 'system', val: 'see work' }], work };
   }
 
-  // ============================================================
-  // POLYNOMIAL OPERATIONS
-  // ============================================================
   function solvePolyOps(text) {
     const nd = window.nerdamer;
     const m = text.match(/(?:add|subtract|multiply|divide|expand|simplify|rewrite in standard form)[:\s]+([^\n]+)/i) ||
@@ -736,9 +832,6 @@
     };
   }
 
-  // ============================================================
-  // FUNCTION COMPOSITION / INVERSE / EVALUATION
-  // ============================================================
   function solveComposition(text) {
     const nd = window.nerdamer;
     const fDef = text.match(/f\s*\(\s*x\s*\)\s*=\s*([^,\n]+)/i);
@@ -778,13 +871,9 @@
         work: ['f(x) = ' + fexpr, '', `Substitute x = ${xVal}:`, `  f(${xVal}) = ${fexpr.replace(/x/g, `(${xVal})`)}`, `           = ${out}`]
       };
     }
-
     return null;
   }
 
-  // ============================================================
-  // STATISTICS
-  // ============================================================
   function solveStats(text) {
     const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
     if (!nums) return null;
@@ -826,9 +915,6 @@
     };
   }
 
-  // ============================================================
-  // QUADRATIC FORMS
-  // ============================================================
   function solveQuadForm(text) {
     const m = text.match(/([+-]?[\d.]*)\s*x\s*[\^²]\s*([+-]\s*[\d.]*)\s*x\s*([+-]\s*[\d.]+)?/);
     if (!m) return null;
@@ -882,9 +968,6 @@
     return s;
   }
 
-  // ============================================================
-  // LINE EQUATIONS
-  // ============================================================
   function solveLine(text) {
     const slopeM = text.match(/slope\s*(?:of|=|is)?\s*(-?\d+\.?\d*(?:\/\d+)?)/i);
     const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
@@ -919,9 +1002,6 @@
     return { answers: [{ v: 'y', val: eq.slice(4) }], work };
   }
 
-  // ============================================================
-  // SEQUENCES
-  // ============================================================
   function solveSequence(text) {
     const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
     if (!nums) return null;
@@ -963,9 +1043,6 @@
     return null;
   }
 
-  // ============================================================
-  // GEOMETRY BASICS
-  // ============================================================
   function solveGeometry(text) {
     const t = text.toLowerCase();
 
@@ -1012,14 +1089,15 @@
         ]
       };
     }
-
     return null;
   }
 
   // ============================================================
-  // WORD PROBLEM SOLVER (Groq)
+  // WORD PROBLEM SOLVER (Groq) — last resort only
   // ============================================================
   const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
+
+The input text is scraped from a homework page and may contain noise (menu labels, headers, mangled KaTeX with fractions split across lines). Reconstruct the intended problem first, then solve.
 
 Return ONLY valid JSON, no prose, matching this exact shape:
 {
@@ -1094,7 +1172,7 @@ Rules:
       if (!k) { showToast('cancelled — key required'); return null; }
     }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
-    if (clean.length < 20) { showToast('problem too short'); return null; }
+    if (clean.length < 15) { showToast('problem too short'); return null; }
 
     showToast('asking AI…');
     let data;
@@ -1166,6 +1244,7 @@ Rules:
     if (/\bdistance\b|\bmidpoint\b/i.test(t)) return 'distance';
     if (/\b(area|perimeter|circumference|volume)\b/i.test(t)) return 'geometry';
 
+    // Word problem — only when there is genuinely no equation anywhere on the page
     const wordCount = (t.match(/\b[a-z]+\b/gi) || []).length;
     const hasEquation = /[=<>≤≥]/.test(t) || /[a-z]\s*[\^²]/.test(t);
     if (!hasEquation && wordCount > 20) return 'word';
