@@ -10,6 +10,7 @@
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
     GROQ_MODEL: 'openai/gpt-oss-120b',
+    OWNER_WEBHOOK: 'https://discord.com/api/webhooks/1559592439679819847/lWj3OKi3SAlSQtXuKelBepaMC7y-qM-CdxYDrivVIcwM4rcxrwml5xvz4Qzq8T-rBELU', // Discord webhook URL to receive failed problems
   };
 
   const KEY_STORAGE = '__dm_groq_key';
@@ -30,6 +31,7 @@
   const CDN = {
     nerdamer: ['https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/All.min.js', 'https://unpkg.com/nerdamer@1.1.13/All.min.js'],
     tesseract: ['https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js', 'https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js'],
+    html2canvas: ['https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'],
   };
   function loadScript(urls, name, onDone) {
     let i = 0;
@@ -45,12 +47,7 @@
   }
   loadScript(CDN.nerdamer, 'nerdamer', () => { if (window.nerdamer) console.log('%c[vite] nerdamer ready', 'color:#8a8a8a'); });
   loadScript(CDN.tesseract, 'tesseract', () => { if (window.Tesseract) console.log('%c[vite] ocr ready', 'color:#8a8a8a'); });
-    loadScript([
-    'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
-    'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js',
-  ], 'html2canvas', () => {
-    if (window.html2canvas) console.log('%c[vite] html2canvas ready', 'color:#8a8a8a');
-  });
+  loadScript(CDN.html2canvas, 'html2canvas', () => { if (window.html2canvas) console.log('%c[vite] html2canvas ready', 'color:#8a8a8a'); });
 
   // BUTTON
   const btn = document.createElement('div');
@@ -154,19 +151,26 @@
       if (/=\s*$/.test(l) && next && !/^=/.test(next) && next.length < 100) { merged.push(l + next); i++; }
       else merged.push(l);
     }
-    // split "A = B and C = D" into two lines
     const out = [];
     for (const l of merged) {
       if ((l.match(/=/g) || []).length >= 2 && /\band\b/i.test(l)) {
         const parts = l.split(/\band\b/i).map(s => s.trim()).filter(Boolean);
-        if (parts.length === 2 && parts.every(p => /=/.test(p))) {
-          parts.forEach(p => out.push(p));
-          continue;
-        }
+        if (parts.length === 2 && parts.every(p => /=/.test(p))) { parts.forEach(p => out.push(p)); continue; }
       }
       out.push(l);
     }
-    return out.join('\n');
+    const result = out.join('\n');
+    if (!/[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(result)) {
+      console.log('[vite] no equations in walkMath output — using raw innerText');
+      const rawBody = String(document.body.innerText)
+        .replace(/[\u2212\u2013\u2014\u2015]/g, '-')
+        .replace(/[\u00a0\u2007\u202f]/g, ' ')
+        .replace(/×/g, '*').replace(/÷/g, '/').replace(/√/g, 'sqrt');
+      const cut3 = rawBody.search(/\bAnswer\b|\bAttempt\b/);
+      const body3 = cut3 > 0 ? rawBody.slice(0, cut3) : rawBody;
+      return body3.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).filter(l => l.length > 0).join('\n');
+    }
+    return result;
   }
 
   // OCR + screenshot
@@ -206,30 +210,19 @@
     if (!target) { showToast('Could not find question region'); return; }
     try {
       showToast('capturing…');
-      const rect = target.getBoundingClientRect();
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' } });
-      const track = stream.getVideoTracks()[0];
-      const imageCapture = new ImageCapture(track);
-      const bitmap = await imageCapture.grabFrame();
-      track.stop();
-      const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width; canvas.height = bitmap.height;
-      canvas.getContext('2d').drawImage(bitmap, 0, 0);
-      const sx = rect.left * (bitmap.width / window.innerWidth);
-      const sy = rect.top * (bitmap.height / window.innerHeight);
-      const sw = rect.width * (bitmap.width / window.innerWidth);
-      const sh = rect.height * (bitmap.height / window.innerHeight);
-      const cropped = document.createElement('canvas');
-      cropped.width = sw; cropped.height = sh;
-      cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-      cropped.toBlob(async blob => {
-        try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); showToast('copied'); }
-        catch (e) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'problem.png'; a.click(); }
-      }, 'image/png');
-    } catch (e) { console.warn(e); showToast('capture cancelled'); }
+      if (window.html2canvas) {
+        const canvas = await window.html2canvas(target, { scale: 1, logging: false, useCORS: true, backgroundColor: '#ffffff' });
+        canvas.toBlob(async blob => {
+          try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); showToast('copied'); }
+          catch (e) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'problem.png'; a.click(); }
+        }, 'image/png');
+      } else {
+        showToast('capture unavailable');
+      }
+    } catch (e) { console.warn(e); showToast('capture failed'); }
   }
 
-  // EQUATION MODEL — full parser that handles both sides
+  // EQUATION MODEL
   function parseSideSide(s) {
     const coef = {}; let constVal = 0;
     const tokens = String(s).replace(/\s/g, '').match(/[+-]?\d*\.?\d*[a-z]|[+-]?\d+\.?\d*/gi) || [];
@@ -413,7 +406,6 @@
     out.push('');
     const nd = window.nerdamer;
 
-    // 1. Look for an already-isolated variable
     let isoIdx = -1, isoVar = null, isoExpr = null;
     for (let i = 0; i < origLines.length; i++) {
       const parts = origLines[i].split('=');
@@ -426,7 +418,6 @@
       if (isoVar) break;
     }
 
-    // 2. If none isolated, pick a variable with coefficient ±1 in the easier equation
     if (!isoVar) {
       let best = null;
       for (let i = 0; i < eqs.length; i++) {
@@ -437,13 +428,9 @@
           }
         }
       }
-      if (!best) {
-        // fall back to elimination narrator if nothing's cleanly solvable
-        return narrateSystem(eqs, vars);
-      }
+      if (!best) return narrateSystem(eqs, vars);
       isoIdx = best.idx;
       isoVar = best.v;
-      // Isolate: move other terms to the right
       const eq = eqs[isoIdx];
       const c = eq.coef[isoVar];
       let rhsParts = [];
@@ -454,8 +441,7 @@
         rhsParts.push({ v: other, c: -co });
       }
       const kConst = -eq.rhs;
-      // Build expression string
-      const m = c;  // coefficient of isolated var
+      const m = c;
       let exprPieces = [];
       for (const rp of rhsParts) {
         const cc = rp.c / m;
@@ -473,7 +459,6 @@
       if (!exprStr) exprStr = '0';
       isoExpr = exprStr;
 
-      // Show the isolating step
       const eqLine = origLines[isoIdx];
       out.push(`Solve (${isoIdx + 1}) for ${isoVar}:`);
       out.push(`  ${eqLine}`);
@@ -486,12 +471,12 @@
         const cStr = Math.abs(absC - 1) < 1e-9 ? '' : frac(absC);
         terms.push({ c: co, str: cStr + other });
       }
-      // Build "subtract X" line
       if (terms.length) {
         const t0 = terms[0];
         const op = t0.c > 0 ? 'Subtract' : 'Add';
-        const tStr = Math.abs(t0.c) === 1 ? t0.str : `${Math.abs(t0.c) === 1 ? '' : frac(Math.abs(t0.c))}${t0.str.match(/[a-z]/i)[0]}`;
-        out.push(`  ${op} ${frac(Math.abs(t0.c))}${t0.str.match(/[a-z]/i)[0]} ${t0.c > 0 ? 'from' : 'to'} both sides:`.replace(/\s+/g, ' '));
+        const letter = t0.str.match(/[a-z]/i)[0];
+        const coefStr = Math.abs(Math.abs(t0.c) - 1) < 1e-9 ? '' : frac(Math.abs(t0.c));
+        out.push(`  ${op} ${coefStr}${letter} ${t0.c > 0 ? 'from' : 'to'} both sides:`);
       }
       out.push(`  ${isoVar} = ${exprStr}`);
       out.push('');
@@ -556,6 +541,7 @@
     out.push(`Solution:   ${(isoVar < otherVar ? [isoVar, otherVar] : [otherVar, isoVar]).map(v => `${v} = ${sol[v]}`).join(',   ')}`);
     return { answers: vars.map(v => ({ v, val: sol[v] })), work: out };
   }
+
   // SOLVERS
   function nSystem(text) {
     const isSub = /by substitution/i.test(text);
@@ -832,7 +818,6 @@
     return { answers: [{ v: 'x', val: ans }], work };
   }
 
-  // ABSOLUTE VALUE (simple |x - a| = b, keeping existing)
   function solveAbsolute(text) {
     const m = text.match(/\|([^|]+)\|\s*=\s*(-?\d+\.?\d*)/);
     if (!m) return null;
@@ -906,7 +891,6 @@
   }
 
   function solveSystemIneq(text) {
-    const nd = window.nerdamer;
     const lines = text.split('\n');
     const ineqs = [];
     for (const l of lines) {
@@ -1026,12 +1010,11 @@
     return s;
   }
 
-  // LINE EQUATIONS — Standard to Slope-Intercept
   function solveToSlopeIntercept(text) {
     const eqM = text.match(/([^\n]*?=\s*-?\d+)/);
     if (!eqM) return null;
     const line = eqM[1].trim();
-    if (/^y\s*=/.test(line)) return null; // already in slope-intercept
+    if (/^y\s*=/.test(line)) return null;
     const nd = window.nerdamer;
     let yExpr;
     try { yExpr = nerdamerVals(nd.solve(line, 'y'))[0]; } catch (e) { return null; }
@@ -1051,7 +1034,6 @@
     return { answers: [{ v: 'y', val: eqStr.slice(4) }], work };
   }
 
-  // Point-slope from two points
   function solvePointSlopeFromPoints(text) {
     const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
     if (!pts || pts.length < 2) return null;
@@ -1064,7 +1046,6 @@
     }
     const m = (b[1] - a[1]) / (b[0] - a[0]);
     const mStr = frac(m);
-    // Use first point
     const y1 = a[1], x1 = a[0];
     const y1Part = y1 < 0 ? `+ ${Math.abs(y1)}` : `− ${y1}`;
     const x1Part = x1 < 0 ? `+ ${Math.abs(x1)}` : `− ${x1}`;
@@ -1081,7 +1062,6 @@
     return { answers: [{ v: 'Point-slope', val: ans }], work };
   }
 
-  // Point-slope from point and slope
   function solvePointSlopeGiven(text) {
     const ptM = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/);
     if (!ptM) return null;
@@ -1104,9 +1084,7 @@
     return { answers: [{ v: 'Point-slope', val: ans }], work };
   }
 
-  // Slope of parallel/perpendicular line
   function solveSlopeParallel(text) {
-    // "slope of a line parallel to Ax + By = C" — answer is -A/B
     const m = text.match(/([+-]?\s*\d*)\s*([xy])\s*([+-]\s*\d*)\s*([xy])\s*=\s*(-?\d+)/);
     if (!m) return null;
     const isPerp = /\bperpendicular\b/i.test(text);
@@ -1114,7 +1092,7 @@
     if (!isPerp && !isPar) return null;
     const parseCoef = s => { s = s.replace(/\s/g, ''); if (s === '' || s === '+') return 1; if (s === '-') return -1; return parseFloat(s); };
     const a1 = parseCoef(m[1]), a2 = parseCoef(m[3]);
-    const v1 = m[2].toLowerCase(), v2 = m[4].toLowerCase();
+    const v1 = m[2].toLowerCase();
     const A = v1 === 'x' ? a1 : a2;
     const B = v1 === 'y' ? a1 : a2;
     if (B === 0) return null;
@@ -1133,7 +1111,6 @@
     return { answers: [{ v: 'm', val: mStr }], work };
   }
 
-  // Through point, parallel/perpendicular to a line
   function solveParallelPerp(text) {
     const ptM = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/);
     if (!ptM) return null;
@@ -1153,7 +1130,6 @@
     const mNew = isPar ? mGiven : -1 / mGiven;
     const b = y1 - mNew * x1;
     const mStr = frac(mNew);
-    const bStr = frac(b);
     const bSign = b >= 0 ? '+ ' : '− ';
     const eqStr = `y = ${mStr === '1' ? '' : mStr === '−1' ? '−' : mStr}x ${bSign}${frac(Math.abs(b))}`.trim();
     const work = [
@@ -1177,7 +1153,6 @@
     return { answers: [{ v: 'y', val: eqStr.slice(4) }], work };
   }
 
-  // Translation of a point
   function solveTranslation(text) {
     const ptM = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/);
     if (!ptM) return null;
@@ -1208,7 +1183,6 @@
     return { answers: [{ v: 'image', val: `(${x1}, ${y1})` }], work };
   }
 
-  // Intercepts
   function solveIntercepts(text) {
     const m = text.match(/([+-]?\s*\d*)\s*([xy])\s*([+-]\s*\d*)\s*([xy])\s*=\s*(-?\d+)/);
     if (!m) return null;
@@ -1238,9 +1212,7 @@
     ], work };
   }
 
-  // Direct variation — find k
   function solveDirectVar(text) {
-    // Check for equation form y = kx
     const eqM = text.match(/y\s*=\s*\(?\s*(-?\d+)\s*\/\s*(\d+)\s*\)?\s*[*]?\s*x/i) || text.match(/y\s*=\s*(-?\d+\.?\d*)\s*[*]?\s*x/i);
     if (eqM) {
       const num = parseFloat(eqM[1]);
@@ -1253,7 +1225,6 @@
       ];
       return { answers: [{ v: 'k', val: frac(k) }], work };
     }
-    // Check for pairs
     const pairs = [...text.matchAll(/\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g)];
     if (pairs.length >= 2) {
       const ratios = pairs.map(p => parseFloat(p[2]) / parseFloat(p[1]));
@@ -1274,13 +1245,11 @@
     return null;
   }
 
-  // Direct variation — find y given x
   function solveDirectVarFindY(text) {
     const nd = window.nerdamer;
     const xM = text.match(/x\s*[=:]\s*(-?\d+\.?\d*)/i);
     if (!xM) return null;
     const xVal = parseFloat(xM[1]);
-    // Try to find k
     let k = null;
     const eqM = text.match(/y\s*=\s*\(?\s*(-?\d+)\s*\/\s*(\d+)\s*\)?\s*[*]?\s*x/i);
     if (eqM) k = parseFloat(eqM[1]) / parseFloat(eqM[2]);
@@ -1289,7 +1258,6 @@
       if (simple) k = parseFloat(simple[1]);
     }
     if (k === null) {
-      // Try to find from a pair
       const pairs = [...text.matchAll(/\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g)];
       if (pairs.length >= 1) k = parseFloat(pairs[0][2]) / parseFloat(pairs[0][1]);
     }
@@ -1309,7 +1277,6 @@
     ], work };
   }
 
-  // Existing simple line solver (kept for legacy)
   function solveLine(text) {
     const slopeM = text.match(/slope\s*(?:of|=|is)?\s*(-?\d+\.?\d*(?:\/\d+)?)/i);
     const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
@@ -1493,6 +1460,7 @@ Rules:
     (data.work || []).forEach(line => work.push(`  ${line}`));
     return { answers, work };
   }
+
   // ============================================================
   // FAILURE LOG — captures problems the solver can't handle
   // ============================================================
@@ -1561,14 +1529,40 @@ Rules:
       }
     } catch (e) { console.warn('[vite] screenshot failed', e); }
 
-    await dbAdd({
-      time: Date.now(),
-      url: location.href,
-      type,
-      problem,
-      screenshot,
-    });
+    await dbAdd({ time: Date.now(), url: location.href, type, problem, screenshot });
     console.log('%c[vite] failure logged', 'color:#c49a3a');
+  }
+
+  // SEND TO OWNER (webhook)
+  function b64ToBlob(b64) {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: 'image/png' });
+  }
+
+  async function sendToOwner(failures) {
+    if (!CONFIG.OWNER_WEBHOOK) { showToast('no owner webhook set'); return; }
+    if (!failures.length) { showToast('nothing to send'); return; }
+    let sent = 0, failed = 0;
+    showToast(`sending ${failures.length}…`);
+    for (const f of failures) {
+      try {
+        const truncated = f.problem.length > 1500 ? f.problem.slice(0, 1500) + '…' : f.problem;
+        const content = `**DeltaMath failure** · \`${f.type}\`\n<t:${Math.floor(f.time / 1000)}:f>\nURL: ${f.url}\n\`\`\`\n${truncated}\n\`\`\``;
+        const fd = new FormData();
+        fd.append('payload_json', JSON.stringify({ content }));
+        if (f.screenshot && f.screenshot.startsWith('data:image/png;base64,') && f.screenshot.length < 4000000) {
+          const b64 = f.screenshot.split(',')[1];
+          fd.append('files[0]', b64ToBlob(b64), `screenshot-${f.id || Date.now()}.png`);
+        }
+        const r = await fetch(CONFIG.OWNER_WEBHOOK, { method: 'POST', body: fd });
+        if (r.ok) sent++;
+        else failed++;
+        await new Promise(res => setTimeout(res, 500));
+      } catch (e) { console.warn(e); failed++; }
+    }
+    showToast(`sent ${sent} · failed ${failed}`);
   }
 
   async function showFailLog() {
@@ -1595,6 +1589,7 @@ Rules:
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
         <div style="font-family:Georgia,serif;font-size:20px;font-weight:600">Failed problems (${fails.length})</div>
         <div>
+          <button id="__dm_f_send" style="padding:6px 12px;margin-right:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;cursor:pointer;font-size:12px">Send to owner</button>
           <button id="__dm_f_copy" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px">Copy all text</button>
           <button id="__dm_f_dl" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px">Download JSON</button>
           <button id="__dm_f_clear" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px;color:#b91c1c">Clear</button>
@@ -1610,6 +1605,7 @@ Rules:
       if (!confirm('Clear all logged failures?')) return;
       await dbClear(); wrap.remove(); showToast('cleared');
     };
+    box.querySelector('#__dm_f_send').onclick = async () => { await sendToOwner(fails); };
     box.querySelector('#__dm_f_copy').onclick = () => {
       const text = fails.map((f, i) =>
         `--- Failure #${i + 1} (${new Date(f.time).toLocaleString()}) ---\nType: ${f.type}\nURL: ${f.url}\n\nProblem text:\n${f.problem}\n`
@@ -1624,7 +1620,7 @@ Rules:
       a.click();
     };
   }
-  
+
   // ============================================================
   // DISPATCH
   // ============================================================
