@@ -12,7 +12,29 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
+    GROQ_MODEL: 'llama-3.3-70b-versatile',
   };
+
+  const KEY_STORAGE = '__dm_groq_key';
+
+  function getGroqKey() {
+    try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; }
+  }
+  function setGroqKey(k) {
+    try { localStorage.setItem(KEY_STORAGE, k); } catch {}
+  }
+  function clearGroqKey() {
+    try { localStorage.removeItem(KEY_STORAGE); } catch {}
+  }
+  function promptForKey() {
+    const k = window.prompt(
+      'Enter your Groq API key.\n\nStored only in this browser (localStorage). Never sent anywhere except api.groq.com.',
+      getGroqKey()
+    );
+    if (k && k.trim().startsWith('gsk_')) { setGroqKey(k.trim()); showToast('key saved'); return k.trim(); }
+    if (k) showToast('invalid key — must start with gsk_');
+    return '';
+  }
 
   // ============================================================
   // ENGINE LOADERS
@@ -1014,7 +1036,115 @@
         ]
       };
     }
-    
+
+  // ============================================================
+  // WORD PROBLEM SOLVER (Groq)
+  // ============================================================
+  const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
+
+Return ONLY valid JSON, no prose, matching this exact shape:
+{
+  "variables": ["x", "y"],
+  "meanings": {"x": "Bill's age", "y": "Sam's age"},
+  "equations": ["x = 2y", "(x+5) + (y+5) = 40"],
+  "solution": {"x": "10", "y": "5"},
+  "work": [
+    "Let x = Bill's age and y = Sam's age.",
+    "From 'Bill is twice as old as Sam': x = 2y",
+    "From 'in 5 years the sum will be 40': (x+5) + (y+5) = 40",
+    "Substitute x = 2y: (2y+5) + (y+5) = 40",
+    "3y + 10 = 40",
+    "3y = 30",
+    "y = 10",
+    "x = 2(10) = 20",
+    "Bill is 20, Sam is 10."
+  ]
+}
+
+Rules:
+- Equations use standard math notation (x, y, =, +, -, *, /, ^).
+- Solution values are exact — use fractions like "3/2" instead of "1.5" when applicable.
+- Work steps read like a student writing in a notebook. Plain text, one step per line.
+- If the problem is unsolvable or not a math problem, return {"error": "reason"}.`;
+
+  async function askGroq(userText) {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + CONFIG.GROQ_KEY,
+      },
+      body: JSON.stringify({
+        model: CONFIG.GROQ_MODEL,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: WORD_SYSTEM_PROMPT },
+          { role: 'user', content: userText },
+        ],
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(`Groq ${r.status}: ${err.slice(0, 120)}`);
+    }
+    const data = await r.json();
+    return JSON.parse(data.choices[0].message.content);
+  }
+
+  async function solveWordProblem(text) {
+    if (!CONFIG.GROQ_KEY || CONFIG.GROQ_KEY.indexOf('gsk_') !== 0) {
+      showToast('no Groq key set');
+      return null;
+    }
+    const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
+    if (clean.length < 20) { showToast('problem too short'); return null; }
+
+    showToast('asking AI…');
+    let data;
+    try { data = await askGroq(clean); }
+    catch (e) {
+      console.warn(e);
+      showToast('Groq call failed — see console');
+      return null;
+    }
+    if (data.error) { showToast('AI: ' + data.error); return null; }
+    if (!data.solution || !data.variables) { showToast('AI gave bad response'); return null; }
+
+    const answers = data.variables.map(v => ({
+      v,
+      val: data.solution[v] != null ? String(data.solution[v]) : '?',
+    }));
+
+    const work = [];
+    work.push('Word problem:');
+    work.push('');
+    const wrapped = wrapText(clean, 68);
+    wrapped.forEach(l => work.push('  ' + l));
+    work.push('');
+    work.push('Assign variables:');
+    data.variables.forEach(v => work.push(`  ${v} = ${data.meanings?.[v] || v}`));
+    work.push('');
+    work.push('Set up equations:');
+    (data.equations || []).forEach((eq, i) => work.push(`  (${i + 1})   ${eq}`));
+    work.push('');
+    work.push('Solve:');
+    (data.work || []).forEach(line => work.push(`  ${line}`));
+
+    return { answers, work };
+  }
+
+  function wrapText(s, width) {
+    const words = s.split(/\s+/);
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).trim().length > width) { lines.push(cur.trim()); cur = w; }
+      else cur += ' ' + w;
+    }
+    if (cur.trim()) lines.push(cur.trim());
+    return lines;
+  }
     // Rectangle: length and width
     const lM = t.match(/length\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
     const wM = t.match(/width\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
@@ -1118,7 +1248,12 @@
     
     // Geometry fallback
     if (/\b(area|perimeter|circumference|volume)\b/i.test(t)) return 'geometry';
-    
+
+    // Word problem fallback — text heavy, no parseable equation
+    const wordCount = (t.match(/\b[a-z]+\b/gi) || []).length;
+    const hasEquation = /[=<>≤≥]/.test(t) || /[a-z]\s*[\^²]/.test(t);
+    if (!hasEquation && wordCount > 20) return 'word';
+
     return 'unknown';
   }
 
@@ -1158,10 +1293,11 @@
       line: solveLine,
       polyOps: nd ? solvePolyOps : null,
       geometry: solveGeometry,
+      word: solveWordProblem,
     };
     const fn = table[type];
     if (!fn) { showToast(`Unrecognized (${type})`); return; }
-    let r; try { r = fn(text); } catch (e) { console.warn(e); r = null; }
+    let r; try { r = await fn(text); } catch (e) { console.warn(e); r = null; }
     if (!r) { showToast(`Couldn't solve (${type})`); return; }
     showModal(r);
   }
