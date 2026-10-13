@@ -8,17 +8,18 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    GROQ_MODEL: 'openai/gpt-oss-120b',
-     OWNER_WEBHOOK: 'https://discord.com/api/webhooks/1559592439679819847/lWj3OKi3SAlSQtXuKelBepaMC7y-qM-CdxYDrivVIcwM4rcxrwml5xvz4Qzq8T-rBELU', // sent to my discord bot
+    AI_MODEL: 'gemini-2.0-flash',
+    OWNER_WEBHOOK: '',
   };
-  const KEY_STORAGE = '__dm_groq_key';
-  function getGroqKey() { try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; } }
-  function setGroqKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch {} }
-  function clearGroqKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
+
+  const KEY_STORAGE = '__dm_api_key';
+  function getApiKey() { try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; } }
+  function setApiKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch {} }
+  function clearApiKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
   function promptForKey() {
-    const k = window.prompt('Enter your Groq API key.\n\nStored only in this browser (localStorage). Never sent anywhere except api.groq.com.', getGroqKey());
-    if (k && k.trim().startsWith('gsk_')) { setGroqKey(k.trim()); showToast('key saved'); return k.trim(); }
-    if (k) showToast('invalid key — must start with gsk_');
+    const k = window.prompt('Enter your API key.\n\nStored only in this browser.', getApiKey());
+    if (k && k.trim().startsWith('AIza')) { setApiKey(k.trim()); return k.trim(); }
+    if (k) showToast('invalid key format');
     return '';
   }
 
@@ -47,7 +48,7 @@
   loadScript(CDN.tesseract, 'tesseract', () => { if (window.Tesseract) console.log('ocr loaded'); });
   loadScript(CDN.html2canvas, 'html2canvas', () => { if (window.html2canvas) console.log('html2canvas loaded'); });
 
-  // the little ? button
+  // the ? button
   const btn = document.createElement('div');
   btn.id = '__dm_btn';
   btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;border:1px solid rgba(0,0,0,.05);box-shadow:0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10);transition:background .12s ease, box-shadow .12s ease;`;
@@ -83,7 +84,6 @@
   function nerdamerVals(sol) { const list = Array.isArray(sol) ? sol : [sol]; return list.map(x => unwrap(x.toString())).filter(v => v !== ''); }
   function flipOp(o) { return { '<': '>', '<=': '>=', '>': '<', '>=': '<=' }[o] || o; }
 
-  // walk the math DOM (mathquill, katex, mathml) and turn it back into plain text
   function walkMath(node) {
     if (!node) return '';
     if (node.nodeType === 3) return node.textContent || '';
@@ -169,7 +169,6 @@
     return result;
   }
 
-  // "2and" -> "2 and " and split "A=B and C=D" onto separate lines
   function normalizeEqText(text) {
     let t = text.replace(/(\d)\s*and\s+/gi, '$1 and ');
     const lines = t.split('\n');
@@ -198,7 +197,7 @@
     });
   }
   async function ocrImages() {
-    if (!window.Tesseract) { showToast('OCR not ready'); return ''; }
+    if (!window.Tesseract) { showToast('ocr not ready'); return ''; }
     const imgs = findQuestionImages();
     if (!imgs.length) return '';
     const out = [];
@@ -257,7 +256,6 @@
     } catch (e) { console.warn('screenshot+OCR failed', e); return ''; }
   }
 
-  // linear equation parsing helpers
   function parseSideSide(s) {
     const coef = {}; let constVal = 0;
     const tokens = String(s).replace(/\s/g, '').match(/[+-]?\d*\.?\d*[a-z]|[+-]?\d+\.?\d*/gi) || [];
@@ -323,7 +321,6 @@
     ];
   }
 
-  // paper-style elimination walkthrough
   function narrateSystem(eqs, vars) {
     const out = ['Given system:', ''];
     for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
@@ -434,7 +431,6 @@
     return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
   }
 
-  // substitution walkthrough
   function narrateSubstitution(eqs, vars, origLines) {
     const out = ['Given system:', ''];
     origLines.forEach((l, i) => out.push(`  (${i + 1})   ${l}`));
@@ -1420,8 +1416,7 @@
     return null;
   }
 
-  // ai fallback for word problems
-  const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
+  const AI_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
 
 The input text is scraped from a homework page and may contain noise. Reconstruct the intended problem first, then solve.
 
@@ -1446,37 +1441,38 @@ Rules:
     return lines;
   }
 
-  async function askGroq(userText) {
-    let key = getGroqKey();
+  async function askAI(userText) {
+    let key = getApiKey();
     if (!key) key = promptForKey();
     if (!key) throw new Error('no key');
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.AI_MODEL}:generateContent?key=${key}`;
+    const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: CONFIG.GROQ_MODEL,
-        temperature: 0,
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: WORD_SYSTEM_PROMPT }, { role: 'user', content: userText }],
+        systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
+        contents: [{ parts: [{ text: userText }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
       }),
     });
     if (!r.ok) {
-      const err = await r.text();
-      if (r.status === 401) { clearGroqKey(); showToast('bad key, cleared'); }
-      throw new Error(`Groq ${r.status}: ${err.slice(0, 120)}`);
+      if (r.status === 401 || r.status === 403) { clearApiKey(); showToast('session expired, try again'); }
+      throw new Error(`http ${r.status}`);
     }
     const data = await r.json();
-    return JSON.parse(data.choices[0].message.content);
+    let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('empty response');
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    return JSON.parse(text);
   }
 
   async function solveWordProblem(text) {
-    if (!getGroqKey()) { const k = promptForKey(); if (!k) return null; }
+    if (!getApiKey()) { const k = promptForKey(); if (!k) return null; }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
     if (clean.length < 15) return null;
-    showToast('asking ai…');
     let data;
-    try { data = await askGroq(clean); } catch (e) { console.warn(e); showToast('groq failed'); return null; }
-    if (data.error) { showToast('ai: ' + data.error); return null; }
+    try { data = await askAI(clean); } catch (e) { console.warn('[net]', e.message); return null; }
+    if (data.error) return null;
     if (!data.solution || !data.variables) return null;
     const answers = data.variables.map(v => ({ v, val: data.solution[v] != null ? String(data.solution[v]) : '?' }));
     const work = ['Word problem:', ''];
@@ -1490,7 +1486,6 @@ Rules:
     return { answers, work };
   }
 
-  // failed problem log
   function openDB() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('dm_fails', 1);
@@ -1568,7 +1563,7 @@ Rules:
   }
 
   async function sendToOwner(failures) {
-    if (!CONFIG.OWNER_WEBHOOK) { showToast('no owner webhook set'); return; }
+    if (!CONFIG.OWNER_WEBHOOK) { showToast('no webhook set'); return; }
     if (!failures.length) { showToast('nothing to send'); return; }
     let sent = 0, failed = 0;
     showToast(`sending ${failures.length}…`);
@@ -1647,7 +1642,6 @@ Rules:
     };
   }
 
-  // router
   function detect(t) {
     if (/\bsolve the (following )?system\b/i.test(t) || /\bby substitution\b/i.test(t) || /\bby elimination\b/i.test(t)) return 'system';
     if (/\bname the property\b/i.test(t) || /\bproperties?\s+of\s+real\s+numbers?\b/i.test(t)) return 'property';
@@ -1759,14 +1753,15 @@ Rules:
       word: solveWordProblem,
     };
     const fn = table[type];
-    if (!fn) {
-      showToast(`Unrecognized (${type})`);
-      logFailure(text, type);
-      return;
+    let r = null;
+    if (fn) {
+      try { r = await fn(text); } catch (e) { console.warn(e); r = null; }
     }
-    let r; try { r = await fn(text); } catch (e) { console.warn(e); r = null; }
     if (!r) {
-      showToast(`Couldn't solve (${type})`);
+      try { r = await solveWordProblem(text); } catch (e) { console.warn('[net]', e.message); }
+    }
+    if (!r) {
+      showToast('couldn\'t solve this one');
       logFailure(text, type);
       return;
     }
@@ -1781,8 +1776,8 @@ Rules:
     const items = [
       ['Copy problem screenshot', () => copyQuestionScreenshot()],
       ['Read text from image (OCR)', async () => { const t = await ocrImages(); showToast(t ? 'read' : 'no image'); }],
-      ['Set Groq API key', () => promptForKey()],
-      ['Clear Groq API key', () => { clearGroqKey(); showToast('key cleared'); }],
+      ['Set API key', () => promptForKey()],
+      ['Clear API key', () => { clearApiKey(); showToast('key cleared'); }],
       ['View failed problems', () => showFailLog()],
       ['Update from GitHub', () => selfUpdate()],
     ];
