@@ -8,7 +8,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    AI_MODEL: 'gemini-flash-latest',
+    AI_MODEL: 'deepseek/deepseek-r1:free',
     OWNER_WEBHOOK: '',
   };
 
@@ -18,7 +18,7 @@
   function clearApiKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
   function promptForKey() {
     const k = window.prompt('Enter your API key.\n\nStored only in this browser.', getApiKey());
-    if (k && /^(AIza|AQ\.)/.test(k.trim())) { setApiKey(k.trim()); return k.trim(); }
+    if (k && /^sk-or-/.test(k.trim())) { setApiKey(k.trim()); return k.trim(); }
     if (k) showToast('invalid key format');
     return '';
   }
@@ -1454,17 +1454,22 @@ Rules:
     let key = getApiKey();
     if (!key) key = promptForKey();
     if (!key) throw new Error('no key');
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.AI_MODEL}:generateContent`;
-    const r = await fetch(url, {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': key,
+        'Authorization': 'Bearer ' + key,
+        'HTTP-Referer': 'https://deltamath.com',
+        'X-Title': 'dm-helper',
       },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
-        contents: [{ parts: [{ text: userText }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+        model: CONFIG.AI_MODEL,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: userText },
+        ],
       }),
     });
     if (!r.ok) {
@@ -1472,12 +1477,11 @@ Rules:
       throw new Error(`http ${r.status}`);
     }
     const data = await r.json();
-    let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    let text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('empty response');
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     return JSON.parse(text);
   }
-
   async function solveWordProblem(text) {
     if (!getApiKey()) { const k = promptForKey(); if (!k) return null; }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
