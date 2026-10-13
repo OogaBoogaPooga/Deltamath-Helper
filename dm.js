@@ -12,7 +12,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    GROQ_MODEL: 'llama-3.3-70b-versatile',
+    GROQ_MODEL: 'openai/gpt-oss-120b',
   };
 
   const KEY_STORAGE = '__dm_groq_key';
