@@ -279,183 +279,187 @@
   // ============================================================
   // PAPER-STYLE ELIMINATION
   // ============================================================
-  function narrateSystem(eqs, vars) {
-    const out = [];
-    out.push('Given system:');
-    out.push('');
-    for (let i = 0; i < eqs.length; i++) {
-      out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
+function narrateSystem(eqs, vars) {
+  const out = [];
+  out.push('Given system:');
+  out.push('');
+  for (let i = 0; i < eqs.length; i++) {
+    out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
+  }
+  out.push('');
+
+  // persistent history — every equation ever created, kept forever
+  const allRows = [];
+
+  let rows = eqs.map((e, i) => {
+    const r = { coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) };
+    allRows.push(r);
+    return r;
+  });
+  let counter = eqs.length;
+
+  for (let stepIdx = 0; stepIdx < vars.length - 1; stepIdx++) {
+    const elimVar = vars[stepIdx];
+
+    let allValid = true;
+    for (let k = 0; k + 1 < rows.length; k++) {
+      const cA = rows[k].coef[elimVar] || 0;
+      const cB = rows[k + 1].coef[elimVar] || 0;
+      if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) { allValid = false; break; }
     }
+    if (!allValid) break;
+
+    out.push(`Step ${stepIdx + 1}: Eliminate ${elimVar}`);
     out.push('');
 
-    let rows = eqs.map((e, i) => ({ coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) }));
-    let counter = eqs.length;
+    const nextRows = [];
+    for (let k = 0; k + 1 < rows.length; k++) {
+      const A = rows[k], B = rows[k + 1];
+      const cA = A.coef[elimVar] || 0;
+      const cB = B.coef[elimVar] || 0;
 
-    for (let stepIdx = 0; stepIdx < vars.length - 1; stepIdx++) {
-      const elimVar = vars[stepIdx];
-
-      let allValid = true;
-      for (let k = 0; k + 1 < rows.length; k++) {
-        const cA = rows[k].coef[elimVar] || 0;
-        const cB = rows[k + 1].coef[elimVar] || 0;
-        if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) { allValid = false; break; }
-      }
-      if (!allValid) break;
-
-      out.push(`Step ${stepIdx + 1}: Eliminate ${elimVar}`);
+      out.push(`  Stack (${A.label}) and (${B.label}):`);
+      out.push(`    (${A.label})   ${fmtEq(A, vars)}`);
+      out.push(`    (${B.label})   ${fmtEq(B, vars)}`);
       out.push('');
 
-      const nextRows = [];
-      for (let k = 0; k + 1 < rows.length; k++) {
-        const A = rows[k], B = rows[k + 1];
-        const cA = A.coef[elimVar] || 0;
-        const cB = B.coef[elimVar] || 0;
+      const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
+      const mA = Math.abs(Math.round(cB)) / g2;
+      const mB = Math.abs(Math.round(cA)) / g2;
+      const A2 = scale(A, mA), B2 = scale(B, mB);
+      const sameSign = cA * cB > 0;
+      const result = sameSign ? subEq(B2, A2) : addEq(B2, A2);
 
-        out.push(`  Stack (${A.label}) and (${B.label}):`);
-        out.push(`    (${A.label})   ${fmtEq(A, vars)}`);
-        out.push(`    (${B.label})   ${fmtEq(B, vars)}`);
+      if (mA !== 1 || mB !== 1) {
+        out.push(`  Multiply to match ${elimVar}-coefficients:`);
+        out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
+        out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
         out.push('');
-
-        const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
-        const mA = Math.abs(Math.round(cB)) / g2;
-        const mB = Math.abs(Math.round(cA)) / g2;
-        const A2 = scale(A, mA), B2 = scale(B, mB);
-        const sameSign = cA * cB > 0;
-        const result = sameSign ? subEq(B2, A2) : addEq(B2, A2);
-
-        if (mA !== 1 || mB !== 1) {
-          out.push(`  Multiply to match ${elimVar}-coefficients:`);
-          out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
-          out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
-          out.push('');
-        }
-
-        counter++;
-        const newLabel = `(${counter})`;
-
-        const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
-        const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
-
-        if (sameSign) {
-          out.push(`  Subtract ${aDesc} from ${bDesc}:`);
-          const stack = stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel);
-          stack.forEach(l => out.push(l));
-        } else {
-          out.push(`  Add ${aDesc} and ${bDesc}:`);
-          const stack = stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel);
-          stack.forEach(l => out.push(l));
-        }
-        out.push('');
-
-        nextRows.push({ coef: result.coef, rhs: result.rhs, label: String(counter) });
       }
-      rows = nextRows;
-    }
 
-    // ---- Solve ----
-    const sol = {};
-    const allRows = [
-      ...rows,
-      ...eqs.map((e, i) => ({ coef: e.coef, rhs: e.rhs, label: String(i + 1) }))
-    ];
+      counter++;
+      const newLabel = `(${counter})`;
 
-    let guard = 0;
-    while (Object.keys(sol).length < vars.length && guard++ < 20) {
-      let found = false;
-      for (const row of allRows) {
-        const unknowns = vars.filter(v => Math.abs(row.coef[v] || 0) > 1e-10 && sol[v] === undefined);
-        if (unknowns.length !== 1) continue;
+      const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
+      const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
 
-        const v = unknowns[0];
-        const cV = row.coef[v];
-
-        const knownSubs = [];
-        let sumKnown = 0;
-        for (const other of vars) {
-          if (other === v) continue;
-          if (sol[other] !== undefined) {
-            knownSubs.push(`${other} = ${frac(sol[other])}`);
-            sumKnown += (row.coef[other] || 0) * sol[other];
-          }
-        }
-        const rhsAfter = row.rhs - sumKnown;
-        const val = rhsAfter / cV;
-        sol[v] = val;
-
-        out.push(`From (${row.label}):`);
-        out.push(`  ${fmtEq(row, vars)}`);
-
-        if (knownSubs.length > 0) {
-          out.push(`  Substitute ${knownSubs.join(', ')}:`);
-
-          let subLine = '', first = true;
-          for (const vv of vars) {
-            const c = row.coef[vv] || 0;
-            if (Math.abs(c) < 1e-10) continue;
-            let term;
-            if (vv !== v && sol[vv] !== undefined) {
-              const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
-              const vStr = frac(sol[vv]);
-              term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
-            } else {
-              const absC = Math.abs(c);
-              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-              term = cStr + vv;
-            }
-            if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
-            else subLine += (c < 0 ? ' − ' : ' + ') + term;
-          }
-          out.push(`    ${subLine} = ${frac(row.rhs)}`);
-
-          let evalLine = '', first2 = true;
-          for (const vv of vars) {
-            const c = row.coef[vv] || 0;
-            if (Math.abs(c) < 1e-10) continue;
-            let term, isNeg;
-            if (vv !== v && sol[vv] !== undefined) {
-              const prod = c * sol[vv];
-              term = frac(Math.abs(prod));
-              isNeg = prod < 0;
-            } else {
-              const absC = Math.abs(c);
-              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-              term = cStr + vv;
-              isNeg = c < 0;
-            }
-            if (first2) { evalLine += (isNeg ? '−' : '') + term; first2 = false; }
-            else evalLine += (isNeg ? ' − ' : ' + ') + term;
-          }
-          if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
-
-          if (Math.abs(sumKnown) > 1e-10) {
-            const absC = Math.abs(cV);
-            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-            const combinedLine = (cV < 0 ? '−' : '') + cStr + v + (sumKnown < 0 ? ' − ' : ' + ') + frac(Math.abs(sumKnown));
-            if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
-          }
-
-          if (Math.abs(cV - 1) > 1e-10) {
-            const cVStr = Math.abs(cV + 1) < 1e-10 ? '−' : frac(cV);
-            out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
-          }
-        } else {
-          if (Math.abs(cV - 1) > 1e-10) {
-            out.push(`  Divide both sides by ${frac(cV)}:`);
-          }
-        }
-
-        out.push(`    ${v} = ${frac(val)}`);
-        out.push('');
-
-        found = true;
-        break;
+      if (sameSign) {
+        out.push(`  Subtract ${aDesc} from ${bDesc}:`);
+        const stack = stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel);
+        stack.forEach(l => out.push(l));
+      } else {
+        out.push(`  Add ${aDesc} and ${bDesc}:`);
+        const stack = stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel);
+        stack.forEach(l => out.push(l));
       }
-      if (!found) break;
-    }
+      out.push('');
 
-    out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
-    return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
+      const newRow = { coef: result.coef, rhs: result.rhs, label: String(counter) };
+      nextRows.push(newRow);
+      allRows.push(newRow);
+    }
+    rows = nextRows;
   }
+
+  // ---- Solve, scanning the full history ----
+  const sol = {};
+  let guard = 0;
+  while (Object.keys(sol).length < vars.length && guard++ < 20) {
+    let found = false;
+    for (const row of allRows) {
+      const unknowns = vars.filter(v => Math.abs(row.coef[v] || 0) > 1e-10 && sol[v] === undefined);
+      if (unknowns.length !== 1) continue;
+
+      const v = unknowns[0];
+      const cV = row.coef[v];
+
+      const knownSubs = [];
+      let sumKnown = 0;
+      for (const other of vars) {
+        if (other === v) continue;
+        if (sol[other] !== undefined) {
+          knownSubs.push(`${other} = ${frac(sol[other])}`);
+          sumKnown += (row.coef[other] || 0) * sol[other];
+        }
+      }
+      const rhsAfter = row.rhs - sumKnown;
+      const val = rhsAfter / cV;
+      sol[v] = val;
+
+      out.push(`From ${row.label}:`);
+      out.push(`  ${fmtEq(row, vars)}`);
+
+      if (knownSubs.length > 0) {
+        out.push(`  Substitute ${knownSubs.join(', ')}:`);
+
+        let subLine = '', first = true;
+        for (const vv of vars) {
+          const c = row.coef[vv] || 0;
+          if (Math.abs(c) < 1e-10) continue;
+          let term;
+          if (vv !== v && sol[vv] !== undefined) {
+            const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
+            const vStr = frac(sol[vv]);
+            term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
+          } else {
+            const absC = Math.abs(c);
+            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+            term = cStr + vv;
+          }
+          if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
+          else subLine += (c < 0 ? ' − ' : ' + ') + term;
+        }
+        out.push(`    ${subLine} = ${frac(row.rhs)}`);
+
+        let evalLine = '', first2 = true;
+        for (const vv of vars) {
+          const c = row.coef[vv] || 0;
+          if (Math.abs(c) < 1e-10) continue;
+          let term, isNeg;
+          if (vv !== v && sol[vv] !== undefined) {
+            const prod = c * sol[vv];
+            term = frac(Math.abs(prod));
+            isNeg = prod < 0;
+          } else {
+            const absC = Math.abs(c);
+            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+            term = cStr + vv;
+            isNeg = c < 0;
+          }
+          if (first2) { evalLine += (isNeg ? '−' : '') + term; first2 = false; }
+          else evalLine += (isNeg ? ' − ' : ' + ') + term;
+        }
+        if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
+
+        if (Math.abs(sumKnown) > 1e-10) {
+          const absC = Math.abs(cV);
+          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+          const combinedLine = (cV < 0 ? '−' : '') + cStr + v + (sumKnown < 0 ? ' − ' : ' + ') + frac(Math.abs(sumKnown));
+          if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
+        }
+
+        if (Math.abs(cV - 1) > 1e-10) {
+          const cVStr = Math.abs(cV + 1) < 1e-10 ? '−' : frac(cV);
+          out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
+        }
+      } else {
+        if (Math.abs(cV - 1) > 1e-10) {
+          out.push(`  Divide both sides by ${frac(cV)}:`);
+        }
+      }
+
+      out.push(`    ${v} = ${frac(val)}`);
+      out.push('');
+
+      found = true;
+      break;
+    }
+    if (!found) break;
+  }
+
+  out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
+  return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
+}
 
   // ============================================================
   // SOLVERS
