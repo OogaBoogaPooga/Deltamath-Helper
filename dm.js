@@ -59,7 +59,8 @@
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;
     z-index:2147483000;
-    box-shadow:0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+    border:1px solid rgba(0,0,0,.05);
+    box-shadow:0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10);
     transition:background .12s ease, box-shadow .12s ease;`;
   btn.innerHTML = `
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -70,11 +71,11 @@
     </svg>`;
   btn.addEventListener('mouseenter', () => {
     btn.style.background = '#f9fafb';
-    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08)';
+    btn.style.boxShadow = '0 4px 12px rgba(0,0,0,.20), 0 2px 4px rgba(0,0,0,.12)';
   });
   btn.addEventListener('mouseleave', () => {
     btn.style.background = '#ffffff';
-    btn.style.boxShadow = '0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06)';
+    btn.style.boxShadow = '0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10)';
   });
   document.documentElement.appendChild(btn);
   btn.addEventListener('click', e => {
@@ -85,7 +86,7 @@
     e.preventDefault(); e.stopPropagation();
     openMenu();
   }, true);
-  
+
   // ============================================================
   // HELPERS
   // ============================================================
@@ -310,12 +311,11 @@
         const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
         const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
         if (sameSign) {
-        out.push(`  Subtract ${aDesc} from ${bDesc}:`);
-        out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
+          out.push(`  Subtract ${aDesc} from ${bDesc}:`);
+          out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
         } else {
-        out.push(`  Add ${aDesc} and ${bDesc}:`);
-        out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
-        }
+          out.push(`  Add ${aDesc} and ${bDesc}:`);
+          out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
         }
         out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
         out.push('');
@@ -407,7 +407,10 @@
           }
 
           if (Math.abs(cV - 1) > 1e-10) {
-            out.push(`    ${frac(cV)}${v} = ${frac(rhsAfter)}`);
+            let cVStr;
+            if (Math.abs(cV + 1) < 1e-10) cVStr = '−';
+            else cVStr = frac(cV);
+            out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
           }
         } else {
           if (Math.abs(cV - 1) > 1e-10) {
