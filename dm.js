@@ -1201,7 +1201,6 @@
     const rhs = parts[1];
     if (!lhs || !rhs) return null;
 
-    // Nerdamer reads "xy" as one symbol — insert explicit * between adjacent factors
     function toMul(s) {
       return s
         .replace(/(\d)([a-z])/gi, '$1*$2')
@@ -1217,17 +1216,14 @@
       if (diff !== '0') return null;
     } catch (e) { return null; }
 
-    // Distributive: one side has a parenthesized sum being multiplied, other doesn't
     const hasDistL = /[a-z0-9]\s*\(\s*[^)]*[+\-][^)]*\)/.test(lhs);
     const hasDistR = /[a-z0-9]\s*\(\s*[^)]*[+\-][^)]*\)/.test(rhs);
     if (hasDistL !== hasDistR) return mkProp('Distributive Property');
 
-    // Zero property
     const lExp2 = window.nerdamer(toMul(lhs)).expand().toString();
     const rExp2 = window.nerdamer(toMul(rhs)).expand().toString();
     if (lExp2 === '0' || rExp2 === '0') return mkProp('Zero Property of Multiplication');
 
-    // Identity
     if (/[*×]\s*1\b|\b1\s*[*×]/.test(lhs) || /[*×]\s*1\b|\b1\s*[*×]/.test(rhs)) {
       return mkProp('Identity Property of Multiplication');
     }
@@ -1235,7 +1231,6 @@
       return mkProp('Identity Property of Addition');
     }
 
-    // Inverse
     const varL = (lhs.match(/[a-z]/gi) || []).map(c => c.toLowerCase());
     const varR = (rhs.match(/[a-z]/gi) || []).map(c => c.toLowerCase());
     const anyVar = varL[0] || varR[0];
@@ -1246,26 +1241,7 @@
       if (re2.test(lhs) || re2.test(rhs)) return mkProp('Inverse Property of Multiplication');
     }
 
-    // Associative vs Commutative — compare letter/digit tokens, ignoring parens
     const tokens = s => (s.match(/[a-z]|\d+/gi) || []).map(t => t.toLowerCase());
-    const tL = tokens(lhs);
-    const tR = tokens(rhs);
-    const isAdd = /\+/.test(lhs) && !/[*×]/.test(lhs.replace(/[-−]/g, ''));
-
-    if (tL.join(',') === tR.join(',')) {
-      return mkProp(isAdd ? 'Associative Property of Addition' : 'Associative Property of Multiplication');
-    }
-    const sortedL = [...tL].sort().join(',');
-    const sortedR = [...tR].sort().join(',');
-    if (sortedL === sortedR) {
-      return mkProp(isAdd ? 'Commutative Property of Addition' : 'Commutative Property of Multiplication');
-    }
-
-    return null;
-  }
-
-    // Associative vs Commutative — compare token order ignoring parens and operators
-    const tokens = s => (s.match(/[a-z\d]+/gi) || []).map(t => t.toLowerCase());
     const tL = tokens(lhs);
     const tR = tokens(rhs);
     const isAdd = /\+/.test(lhs) && !/[*×]/.test(lhs.replace(/[-−]/g, ''));
