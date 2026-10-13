@@ -18,7 +18,7 @@
   function clearApiKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
   function promptForKey() {
     const k = window.prompt('Enter your API key.\n\nStored only in this browser.', getApiKey());
-    if (k && k.trim().startsWith('AIza')) { setApiKey(k.trim()); return k.trim(); }
+    if (k && /^(AIza|AQ\.)/.test(k.trim())) { setApiKey(k.trim()); return k.trim(); }
     if (k) showToast('invalid key format');
     return '';
   }
