@@ -237,6 +237,20 @@
       const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/png');
       const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
+      // Cut at "Attempt" — that's where the answer area starts and the useful text ends
+      let cleaned = text;
+      const cut = cleaned.search(/\bAttempt\b/i);
+      if (cut > 0) cleaned = cleaned.slice(0, cut);
+      // Preserve line breaks so the rest of the pipeline can split per-line
+      return cleaned.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).filter(l => l.length > 0).join('\n');
+    } catch (e) { console.warn('[vite] screenshot+OCR failed', e); return ''; }
+  }
+    if (!target) return '';
+    try {
+      showToast('reading equations…');
+      const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
+      const dataUrl = canvas.toDataURL('image/png');
+      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
       return cleanLine(text.replace(/\n+/g, ' '));
     } catch (e) { console.warn('[vite] screenshot+OCR failed', e); return ''; }
   }
@@ -1705,12 +1719,30 @@ Rules:
       const imgText = await ocrImages();
       if (imgText) text = text + '\n' + imgText;
     }
-    // If still no equations, the math is probably rendered as SVG paths — screenshot+OCR it
     if (!/[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text)) {
       console.log('%c[vite] no equations in text — falling back to screenshot+OCR', 'color:#c49a3a');
       const ssText = await screenshotAndOCR();
       if (ssText) text = text + '\n' + ssText;
     }
+    // Normalize: fix "2and" and split "A=B and C=D" into separate lines
+    text = normalizeEqText(text);
+      function normalizeEqText(text) {
+    // "2and" → "2 and " so the splitter regex works
+    let t = text.replace(/(\d)\s*and\s+/gi, '$1 and ');
+    const lines = t.split('\n');
+    const out = [];
+    for (const l of lines) {
+      if ((l.match(/=/g) || []).length >= 2 && /\band\b/i.test(l)) {
+        const parts = l.split(/\band\b/i).map(s => s.trim()).filter(Boolean);
+        if (parts.length === 2 && parts.every(p => /=/.test(p))) {
+          parts.forEach(p => out.push(p));
+          continue;
+        }
+      }
+      out.push(l);
+    }
+    return out.join('\n');
+  }
     console.log('%c[vite:problem]', 'color:#7a9ec9', '\n' + text);
     const type = detect(text);
     console.log('%c[vite] detected:', 'color:#7a9ec9', type);
