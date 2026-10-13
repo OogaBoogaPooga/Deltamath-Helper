@@ -53,14 +53,13 @@
   // ============================================================
   const btn = document.createElement('div');
   btn.style.cssText = `
-    position:fixed;bottom:20px;right:20px;width:44px;height:44px;
-    border-radius:50%;
-    background:#ffffff;
+    position:fixed;bottom:22px;right:22px;width:42px;height:42px;
+    border-radius:9px;
+    background:#f1f3f5;
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;
     z-index:2147483000;
-    box-shadow:0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
-    transition:background .12s ease, box-shadow .12s ease;`;
+    transition:background .12s ease;`;
   btn.innerHTML = `
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
          stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,14 +67,8 @@
       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
       <line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>`;
-  btn.addEventListener('mouseenter', () => {
-    btn.style.background = '#f9fafb';
-    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08)';
-  });
-  btn.addEventListener('mouseleave', () => {
-    btn.style.background = '#ffffff';
-    btn.style.boxShadow = '0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06)';
-  });
+  btn.addEventListener('mouseenter', () => btn.style.background = '#e5e7eb');
+  btn.addEventListener('mouseleave', () => btn.style.background = '#f1f3f5');
   document.documentElement.appendChild(btn);
   btn.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
