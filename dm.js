@@ -259,15 +259,13 @@
     return { lhs: s.slice(0, i), rhs: s.slice(i + 3) };
   }
 
-  // stack two equations with an operation sign, divider, and result
   function stackLines(A_eq, B_eq, op, R_eq, label) {
     const A = splitEq(A_eq);
     const B = splitEq(B_eq);
     const R = splitEq(R_eq);
     const maxLHS = Math.max(A.lhs.length, B.lhs.length, R.lhs.length);
-    const maxRHS = Math.max(A.rhs.length, B.rhs.length, R.rhs.length);
     const padR = (s, n) => s + ' '.repeat(Math.max(0, n - s.length));
-    const dashLen = maxLHS + maxRHS + 5;
+    const dashLen = maxLHS + 14;
     const lines = [];
     lines.push('      ' + padR(A.lhs, maxLHS) + ' = ' + A.rhs);
     lines.push('    ' + op + ' ' + padR(B.lhs, maxLHS) + ' = ' + B.rhs);
@@ -279,190 +277,183 @@
   // ============================================================
   // PAPER-STYLE ELIMINATION
   // ============================================================
-function narrateSystem(eqs, vars) {
-  const out = [];
-  out.push('Given system:');
-  out.push('');
-  for (let i = 0; i < eqs.length; i++) {
-    out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
-  }
-  out.push('');
-
-  // persistent history — every equation ever created, kept forever
-  const allRows = [];
-
-  let rows = eqs.map((e, i) => {
-    const r = { coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) };
-    allRows.push(r);
-    return r;
-  });
-  let counter = eqs.length;
-
-  for (let stepIdx = 0; stepIdx < vars.length - 1; stepIdx++) {
-    const elimVar = vars[stepIdx];
-
-    let allValid = true;
-    for (let k = 0; k + 1 < rows.length; k++) {
-      const cA = rows[k].coef[elimVar] || 0;
-      const cB = rows[k + 1].coef[elimVar] || 0;
-      if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) { allValid = false; break; }
-    }
-    if (!allValid) break;
-
-    out.push(`Step ${stepIdx + 1}: Eliminate ${elimVar}`);
+  function narrateSystem(eqs, vars) {
+    const out = [];
+    out.push('Given system:');
+    out.push('');
+    for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
     out.push('');
 
-    const nextRows = [];
-    for (let k = 0; k + 1 < rows.length; k++) {
-      const A = rows[k], B = rows[k + 1];
-      const cA = A.coef[elimVar] || 0;
-      const cB = B.coef[elimVar] || 0;
+    const allRows = [];
+    let rows = eqs.map((e, i) => {
+      const r = { coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) };
+      allRows.push(r);
+      return r;
+    });
+    let counter = eqs.length;
 
-      out.push(`  Stack (${A.label}) and (${B.label}):`);
-      out.push(`    (${A.label})   ${fmtEq(A, vars)}`);
-      out.push(`    (${B.label})   ${fmtEq(B, vars)}`);
+    for (let stepIdx = 0; stepIdx < vars.length - 1; stepIdx++) {
+      const elimVar = vars[stepIdx];
+
+      let allValid = true;
+      for (let k = 0; k + 1 < rows.length; k++) {
+        const cA = rows[k].coef[elimVar] || 0;
+        const cB = rows[k + 1].coef[elimVar] || 0;
+        if (Math.abs(cA) < 1e-10 || Math.abs(cB) < 1e-10) { allValid = false; break; }
+      }
+      if (!allValid) break;
+
+      out.push(`Step ${stepIdx + 1}: Eliminate ${elimVar}`);
       out.push('');
 
-      const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
-      const mA = Math.abs(Math.round(cB)) / g2;
-      const mB = Math.abs(Math.round(cA)) / g2;
-      const A2 = scale(A, mA), B2 = scale(B, mB);
-      const sameSign = cA * cB > 0;
-      const result = sameSign ? subEq(B2, A2) : addEq(B2, A2);
+      const nextRows = [];
+      for (let k = 0; k + 1 < rows.length; k++) {
+        const A = rows[k], B = rows[k + 1];
+        const cA = A.coef[elimVar] || 0;
+        const cB = B.coef[elimVar] || 0;
 
-      if (mA !== 1 || mB !== 1) {
-        out.push(`  Multiply to match ${elimVar}-coefficients:`);
-        out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
-        out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
+        out.push(`  Stack (${A.label}) and (${B.label}):`);
+        out.push(`    (${A.label})   ${fmtEq(A, vars)}`);
+        out.push(`    (${B.label})   ${fmtEq(B, vars)}`);
         out.push('');
+
+        const g2 = gcd(Math.abs(Math.round(cA)), Math.abs(Math.round(cB)));
+        const mA = Math.abs(Math.round(cB)) / g2;
+        const mB = Math.abs(Math.round(cA)) / g2;
+        const A2 = scale(A, mA), B2 = scale(B, mB);
+        const sameSign = cA * cB > 0;
+        const result = sameSign ? subEq(B2, A2) : addEq(B2, A2);
+
+        if (mA !== 1 || mB !== 1) {
+          out.push(`  Multiply to match ${elimVar}-coefficients:`);
+          out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
+          out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
+          out.push('');
+        }
+
+        counter++;
+        const newLabel = `(${counter})`;
+
+        const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
+        const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
+
+        if (sameSign) {
+          out.push(`  Subtract ${aDesc} from ${bDesc}:`);
+          const stack = stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel);
+          stack.forEach(l => out.push(l));
+        } else {
+          out.push(`  Add ${aDesc} and ${bDesc}:`);
+          const stack = stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel);
+          stack.forEach(l => out.push(l));
+        }
+        out.push('');
+
+        const newRow = { coef: result.coef, rhs: result.rhs, label: String(counter) };
+        nextRows.push(newRow);
+        allRows.push(newRow);
       }
-
-      counter++;
-      const newLabel = `(${counter})`;
-
-      const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
-      const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
-
-      if (sameSign) {
-        out.push(`  Subtract ${aDesc} from ${bDesc}:`);
-        const stack = stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel);
-        stack.forEach(l => out.push(l));
-      } else {
-        out.push(`  Add ${aDesc} and ${bDesc}:`);
-        const stack = stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel);
-        stack.forEach(l => out.push(l));
-      }
-      out.push('');
-
-      const newRow = { coef: result.coef, rhs: result.rhs, label: String(counter) };
-      nextRows.push(newRow);
-      allRows.push(newRow);
+      rows = nextRows;
     }
-    rows = nextRows;
-  }
 
-  // ---- Solve, scanning the full history ----
-  const sol = {};
-  let guard = 0;
-  while (Object.keys(sol).length < vars.length && guard++ < 20) {
-    let found = false;
-    for (const row of allRows) {
-      const unknowns = vars.filter(v => Math.abs(row.coef[v] || 0) > 1e-10 && sol[v] === undefined);
-      if (unknowns.length !== 1) continue;
+    const sol = {};
+    let guard = 0;
+    while (Object.keys(sol).length < vars.length && guard++ < 20) {
+      let found = false;
+      for (const row of allRows) {
+        const unknowns = vars.filter(v => Math.abs(row.coef[v] || 0) > 1e-10 && sol[v] === undefined);
+        if (unknowns.length !== 1) continue;
 
-      const v = unknowns[0];
-      const cV = row.coef[v];
+        const v = unknowns[0];
+        const cV = row.coef[v];
 
-      const knownSubs = [];
-      let sumKnown = 0;
-      for (const other of vars) {
-        if (other === v) continue;
-        if (sol[other] !== undefined) {
-          knownSubs.push(`${other} = ${frac(sol[other])}`);
-          sumKnown += (row.coef[other] || 0) * sol[other];
-        }
-      }
-      const rhsAfter = row.rhs - sumKnown;
-      const val = rhsAfter / cV;
-      sol[v] = val;
-
-      out.push(`From ${row.label}:`);
-      out.push(`  ${fmtEq(row, vars)}`);
-
-      if (knownSubs.length > 0) {
-        out.push(`  Substitute ${knownSubs.join(', ')}:`);
-
-        let subLine = '', first = true;
-        for (const vv of vars) {
-          const c = row.coef[vv] || 0;
-          if (Math.abs(c) < 1e-10) continue;
-          let term;
-          if (vv !== v && sol[vv] !== undefined) {
-            const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
-            const vStr = frac(sol[vv]);
-            term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
-          } else {
-            const absC = Math.abs(c);
-            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-            term = cStr + vv;
+        const knownSubs = [];
+        let sumKnown = 0;
+        for (const other of vars) {
+          if (other === v) continue;
+          if (sol[other] !== undefined) {
+            knownSubs.push(`${other} = ${frac(sol[other])}`);
+            sumKnown += (row.coef[other] || 0) * sol[other];
           }
-          if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
-          else subLine += (c < 0 ? ' − ' : ' + ') + term;
         }
-        out.push(`    ${subLine} = ${frac(row.rhs)}`);
+        const rhsAfter = row.rhs - sumKnown;
+        const val = rhsAfter / cV;
+        sol[v] = val;
 
-        let evalLine = '', first2 = true;
-        for (const vv of vars) {
-          const c = row.coef[vv] || 0;
-          if (Math.abs(c) < 1e-10) continue;
-          let term, isNeg;
-          if (vv !== v && sol[vv] !== undefined) {
-            const prod = c * sol[vv];
-            term = frac(Math.abs(prod));
-            isNeg = prod < 0;
-          } else {
-            const absC = Math.abs(c);
-            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-            term = cStr + vv;
-            isNeg = c < 0;
+        out.push(`From (${row.label}):`);
+        out.push(`  ${fmtEq(row, vars)}`);
+
+        if (knownSubs.length > 0) {
+          out.push(`  Substitute ${knownSubs.join(', ')}:`);
+
+          let subLine = '', first = true;
+          for (const vv of vars) {
+            const c = row.coef[vv] || 0;
+            if (Math.abs(c) < 1e-10) continue;
+            let term;
+            if (vv !== v && sol[vv] !== undefined) {
+              const cStr = Math.abs(Math.abs(c) - 1) < 1e-10 ? '' : frac(Math.abs(c));
+              const vStr = frac(sol[vv]);
+              term = Math.abs(c) === 1 ? `(${vStr})` : `${cStr}(${vStr})`;
+            } else {
+              const absC = Math.abs(c);
+              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+              term = cStr + vv;
+            }
+            if (first) { subLine += (c < 0 ? '−' : '') + term; first = false; }
+            else subLine += (c < 0 ? ' − ' : ' + ') + term;
           }
-          if (first2) { evalLine += (isNeg ? '−' : '') + term; first2 = false; }
-          else evalLine += (isNeg ? ' − ' : ' + ') + term;
-        }
-        if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
+          out.push(`    ${subLine} = ${frac(row.rhs)}`);
 
-        if (Math.abs(sumKnown) > 1e-10) {
-          const absC = Math.abs(cV);
-          const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
-          const combinedLine = (cV < 0 ? '−' : '') + cStr + v + (sumKnown < 0 ? ' − ' : ' + ') + frac(Math.abs(sumKnown));
-          if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
+          let evalLine = '', first2 = true;
+          for (const vv of vars) {
+            const c = row.coef[vv] || 0;
+            if (Math.abs(c) < 1e-10) continue;
+            let term, isNeg;
+            if (vv !== v && sol[vv] !== undefined) {
+              const prod = c * sol[vv];
+              term = frac(Math.abs(prod));
+              isNeg = prod < 0;
+            } else {
+              const absC = Math.abs(c);
+              const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+              term = cStr + vv;
+              isNeg = c < 0;
+            }
+            if (first2) { evalLine += (isNeg ? '−' : '') + term; first2 = false; }
+            else evalLine += (isNeg ? ' − ' : ' + ') + term;
+          }
+          if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
+
+          if (Math.abs(sumKnown) > 1e-10) {
+            const absC = Math.abs(cV);
+            const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+            const combinedLine = (cV < 0 ? '−' : '') + cStr + v + (sumKnown < 0 ? ' − ' : ' + ') + frac(Math.abs(sumKnown));
+            if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
+          }
+
+          if (Math.abs(cV - 1) > 1e-10) {
+            const cVStr = Math.abs(cV + 1) < 1e-10 ? '−' : frac(cV);
+            out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
+          }
+        } else {
+          if (Math.abs(cV - 1) > 1e-10) out.push(`  Divide both sides by ${frac(cV)}:`);
         }
 
-        if (Math.abs(cV - 1) > 1e-10) {
-          const cVStr = Math.abs(cV + 1) < 1e-10 ? '−' : frac(cV);
-          out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
-        }
-      } else {
-        if (Math.abs(cV - 1) > 1e-10) {
-          out.push(`  Divide both sides by ${frac(cV)}:`);
-        }
+        out.push(`    ${v} = ${frac(val)}`);
+        out.push('');
+
+        found = true;
+        break;
       }
-
-      out.push(`    ${v} = ${frac(val)}`);
-      out.push('');
-
-      found = true;
-      break;
+      if (!found) break;
     }
-    if (!found) break;
-  }
 
-  out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
-  return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
-}
+    out.push(`Solution:   ${vars.map(v => `${v} = ${frac(sol[v])}`).join(',   ')}`);
+    return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
+  }
 
   // ============================================================
-  // SOLVERS
+  // CORE SOLVERS (systems + basics)
   // ============================================================
   function nSystem(text) {
     const lines = text.split('\n');
@@ -592,29 +583,547 @@ function narrateSystem(eqs, vars) {
   }
 
   // ============================================================
+  // NEW: LOGARITHMIC EQUATIONS
+  // ============================================================
+  function solveLog(text) {
+    const nd = window.nerdamer;
+    // find an equation containing log or ln
+    const m = text.match(/[^\n]*(?:\blog\b|\bln\b)[^\n]*=[^\n]*/i);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    if (!vals.length) return null;
+    const work = [
+      'Logarithmic equation:',
+      `  ${eq}`, '',
+      'Rewrite in exponential form and solve:', '',
+      ...vals.map(v => `  x = ${v}`)
+    ];
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+  }
+
+  // ============================================================
+  // NEW: EXPONENTIAL EQUATIONS
+  // ============================================================
+  function solveExp(text) {
+    const nd = window.nerdamer;
+    // find equation with variable in exponent: 2^x = 8, e^x = 5, 3^(x+1) = 27
+    const m = text.match(/[^\n]*\d+\s*\^\s*\(?\s*x[^\n]*=[^\n]*/i) ||
+              text.match(/[^\n]*e\s*\^\s*\(?\s*x[^\n]*=[^\n]*/i);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    if (!vals.length) return null;
+    const work = [
+      'Exponential equation:',
+      `  ${eq}`, '',
+      'Take log of both sides and solve:', '',
+      ...vals.map(v => `  x = ${v}`)
+    ];
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+  }
+
+  // ============================================================
+  // NEW: RADICAL EQUATIONS
+  // ============================================================
+  function solveRadical(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/[^\n]*sqrt\s*\([^\n]*=[^\n]*/i);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    if (!vals.length) return null;
+    const work = [
+      'Radical equation:',
+      `  ${eq}`, '',
+      'Isolate the radical, square both sides, solve:', '',
+      ...vals.map(v => `  x = ${v}`),
+      '',
+      '(check for extraneous solutions in the original equation)'
+    ];
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+  }
+
+  // ============================================================
+  // NEW: RATIONAL EQUATIONS
+  // ============================================================
+  function solveRational(text) {
+    const nd = window.nerdamer;
+    // find equation with x in denominator: 1/(x+2) = 3
+    const m = text.match(/[^\n]*\/\s*\([^)]*x[^\n]*=[^\n]*/i) ||
+              text.match(/[^\n]*\/\s*[a-z0-9][^\n]*=[^\n]*/i);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    // must actually have x in denominator — bail if not
+    if (!/\/\s*\(?[^=]*x/.test(eq)) return null;
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    if (!vals.length) return null;
+    const work = [
+      'Rational equation:',
+      `  ${eq}`, '',
+      'Multiply both sides by the LCD, solve:', '',
+      ...vals.map(v => `  x = ${v}`),
+      '',
+      '(check excluded values from the original denominators)'
+    ];
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+  }
+
+  // ============================================================
+  // NEW: TRIG EQUATIONS
+  // ============================================================
+  function solveTrig(text) {
+    const nd = window.nerdamer;
+    const m = text.match(/[^\n]*(?:\bsin\b|\bcos\b|\btan\b)[^\n]*=[^\n]*/i);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
+    const list = Array.isArray(sol) ? sol : [sol];
+    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    if (!vals.length) return null;
+    const work = [
+      'Trig equation:',
+      `  ${eq}`, '',
+      'General solution:',
+      ...vals.map(v => `  x = ${v}`),
+      '',
+      '(n is any integer — period depends on the function)'
+    ];
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+  }
+
+  // ============================================================
+  // NEW: SYSTEMS OF INEQUALITIES
+  // ============================================================
+  function solveSystemIneq(text) {
+    const nd = window.nerdamer;
+    const lines = text.split('\n');
+    const ineqs = [];
+    for (const l of lines) {
+      const m = l.match(/[+-]?[\d.]*\s*[a-z]\s*(?:[+-]\s*[\d.]*\s*[a-z])*\s*(<=|>=|<|>|≤|≥)\s*-?[\d.]+/);
+      if (m) ineqs.push(cleanLine(l).replace(/≤/g, '<=').replace(/≥/g, '>='));
+    }
+    if (ineqs.length < 2) return null;
+    // just show them and provide boundaries — full graph solve isn't feasible in text
+    const work = ['System of inequalities:'];
+    ineqs.forEach((ineq, i) => work.push(`  (${i+1})   ${ineq}`));
+    work.push('');
+    work.push('Solve each inequality for y and graph the boundary lines.');
+    work.push('Shade the overlapping region (test a point).');
+    work.push('');
+    for (let i = 0; i < ineqs.length; i++) {
+      const v = ineqs[i].match(/([a-z])/i);
+      if (!v) continue;
+      const varName = v[1].toLowerCase();
+      const opMatch = ineqs[i].match(/<=|>=|<|>/);
+      if (!opMatch) continue;
+      const op = opMatch[0];
+      const eq = ineqs[i].replace(/<=|>=|<|>/, '=');
+      let sol; try { sol = nd.solve(eq, varName); } catch(e) { continue; }
+      const list = Array.isArray(sol) ? sol : [sol];
+      const vals = list.map(x => x.toString());
+      work.push(`  (${i+1})   ${varName} ${op} ${vals.join(', ')}`);
+    }
+    return { answers: [{ v: 'system', val: 'see work' }], work };
+  }
+
+  // ============================================================
+  // NEW: POLYNOMIAL OPERATIONS
+  // ============================================================
+  function solvePolyOps(text) {
+    const nd = window.nerdamer;
+    // "(x^2 + 3x) + (2x^2 - 5)" or "add: ..." or "multiply: ..."
+    const m = text.match(/(?:add|subtract|multiply|divide|expand|simplify|rewrite in standard form)[:\s]+([^\n]+)/i) ||
+              text.match(/(\([^\)]*[a-z][^\)]*\)\s*[\+\-\*\/×]\s*\([^\)]*[a-z][^\)]*\))/);
+    if (!m) return null;
+    let expr = cleanLine(m[1] || m[0]).replace(/^.*?:\s*/, '');
+    let out;
+    try { out = nd(expr).expand().toString(); } catch (err) { return null; }
+    return {
+      answers: [{ v: 'result', val: out }],
+      work: ['Expression:', `  ${expr}`, '', 'Simplify and combine like terms:', `  ${out}`]
+    };
+  }
+
+  // ============================================================
+  // NEW: FUNCTION COMPOSITION / EVALUATION
+  // ============================================================
+  function solveComposition(text) {
+    const nd = window.nerdamer;
+    // patterns: "f(x) = 2x + 3, g(x) = x - 1, find f(g(x))"
+    const fDef = text.match(/f\s*\(\s*x\s*\)\s*=\s*([^,\n]+)/i);
+    const gDef = text.match(/g\s*\(\s*x\s*\)\s*=\s*([^,\n]+)/i);
+    const comp = text.match(/f\s*\(\s*g\s*\(\s*x\s*\)\s*\)/i);
+    const inv = text.match(/f\s*(?:-1|⁻¹|\^\{-1\})\s*\(\s*x\s*\)/i);
+    const evalAt = text.match(/f\s*\(\s*(-?\d+)\s*\)/i);
+    
+    if (comp && fDef && gDef) {
+      const fexpr = cleanLine(fDef[1]);
+      const gexpr = cleanLine(gDef[1]);
+      let out;
+      try { out = nd(fexpr).sub('x', `(${gexpr})`).expand().toString(); } catch(e) { return null; }
+      return {
+        answers: [{ v: 'f(g(x))', val: out }],
+        work: [
+          'f(x) = ' + fexpr, 'g(x) = ' + gexpr, '',
+          'f(g(x)) = ' + fexpr.replace(/x/g, `(${gexpr})`),
+          '        = ' + out
+        ]
+      };
+    }
+    
+    if (inv && fDef) {
+      const fexpr = cleanLine(fDef[1]);
+      let out;
+      try { out = nd.solve(`y=${fexpr}`, 'x').toString(); } catch(e) { return null; }
+      return {
+        answers: [{ v: 'f⁻¹(x)', val: out.replace(/x/g, 'y') }],
+        work: ['f(x) = ' + fexpr, '', 'Set y = f(x), solve for x:', `  y = ${fexpr}`, `  x = ${out}`, '', `f⁻¹(x) = ${out.replace(/x/g, 'x')}`]
+      };
+    }
+    
+    if (evalAt && fDef) {
+      const fexpr = cleanLine(fDef[1]);
+      const xVal = evalAt[1];
+      let out;
+      try { out = nd(fexpr).sub('x', xVal).evaluate().toString(); } catch(e) { return null; }
+      return {
+        answers: [{ v: `f(${xVal})`, val: out }],
+        work: ['f(x) = ' + fexpr, '', `Substitute x = ${xVal}:`, `  f(${xVal}) = ${fexpr.replace(/x/g, `(${xVal})`)}`, `           = ${out}`]
+      };
+    }
+    
+    return null;
+  }
+
+  // ============================================================
+  // NEW: STATISTICS (mean / median / mode / range / stdev)
+  // ============================================================
+  function solveStats(text) {
+    const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
+    if (!nums) return null;
+    const arr = nums[0].split(',').map(s => parseFloat(s.trim()));
+    if (arr.length < 2) return null;
+    
+    const sorted = [...arr].sort((a,b) => a-b);
+    const n = arr.length;
+    const sum = arr.reduce((a,b) => a+b, 0);
+    const mean = sum / n;
+    const median = n % 2 ? sorted[(n-1)/2] : (sorted[n/2-1] + sorted[n/2]) / 2;
+    const freq = {};
+    for (const x of arr) freq[x] = (freq[x]||0) + 1;
+    const maxF = Math.max(...Object.values(freq));
+    const modes = Object.keys(freq).filter(k => freq[k] === maxF).map(Number);
+    const range = sorted[n-1] - sorted[0];
+    const variance = n > 1 ? arr.reduce((a,b) => a + (b-mean)**2, 0) / (n-1) : 0;
+    const stdev = Math.sqrt(variance);
+    
+    const modeStr = modes.length === arr.length && maxF === 1 ? 'none' : modes.join(', ');
+    
+    const work = [
+      'Data:', `  ${arr.join(', ')}`, '',
+      'Sorted:', `  ${sorted.join(', ')}`, '',
+      'Mean:', `  (${arr.join(' + ')}) / ${n} = ${frac(mean)}`,
+      'Median:', `  ${frac(median)}`,
+      'Mode:', `  ${modeStr}`,
+      'Range:', `  ${sorted[n-1]} − ${sorted[0]} = ${frac(range)}`,
+      'Standard deviation (sample):', `  ${frac(stdev)}`
+    ];
+    return {
+      answers: [
+        { v: 'mean', val: frac(mean) },
+        { v: 'median', val: frac(median) },
+        { v: 'mode', val: modeStr },
+        { v: 'range', val: frac(range) },
+        { v: 'stdev', val: frac(stdev) },
+      ],
+      work
+    };
+  }
+
+  // ============================================================
+  // NEW: QUADRATIC FORMS (vertex / axis / discriminant)
+  // ============================================================
+  function solveQuadForm(text) {
+    const m = text.match(/([+-]?[\d.]*)\s*x\s*[\^²]\s*([+-]\s*[\d.]*)\s*x\s*([+-]\s*[\d.]+)?/);
+    if (!m) return null;
+    const aStr = m[1];
+    const bStr = m[2].replace(/\s/g, '');
+    const cStr = (m[3] || '0').replace(/\s/g, '');
+    const a = aStr === '' || aStr === '+' ? 1 : aStr === '-' ? -1 : parseFloat(aStr);
+    const b = bStr === '' || bStr === '+' ? 1 : bStr === '-' ? -1 : parseFloat(bStr);
+    const c = cStr === '' ? 0 : parseFloat(cStr);
+    if (!a) return null;
+    
+    const vertexX = -b / (2*a);
+    const vertexY = a*vertexX*vertexX + b*vertexX + c;
+    const disc = b*b - 4*a*c;
+    const axis = vertexX;
+    const yInt = c;
+    
+    const work = [
+      'Quadratic:',
+      `  y = ${fmtQuadratic(a, b, c)}`, '',
+      `  a = ${a},   b = ${b},   c = ${c}`, '',
+      'Axis of symmetry:',
+      `  x = −b / (2a) = −(${b}) / (2·${a}) = ${frac(axis)}`, '',
+      'Vertex:',
+      `  x = ${frac(vertexX)},   y = ${frac(vertexY)}`,
+      `  (${frac(vertexX)}, ${frac(vertexY)})`, '',
+      'Discriminant:',
+      `  b² − 4ac = ${b}² − 4(${a})(${c}) = ${frac(disc)}`, '',
+      'Y-intercept:',
+      `  (0, ${frac(yInt)})`
+    ];
+    return {
+      answers: [
+        { v: 'vertex', val: `(${frac(vertexX)}, ${frac(vertexY)})` },
+        { v: 'axis', val: `x = ${frac(axis)}` },
+        { v: 'discriminant', val: frac(disc) }
+      ],
+      work
+    };
+  }
+  
+  function fmtQuadratic(a, b, c) {
+    let s = '';
+    if (a === 1) s += 'x²';
+    else if (a === -1) s += '−x²';
+    else s += frac(a) + 'x²';
+    if (b > 0) s += ' + ' + (b === 1 ? '' : frac(b)) + 'x';
+    else if (b < 0) s += ' − ' + (b === -1 ? '' : frac(Math.abs(b))) + 'x';
+    if (c > 0) s += ' + ' + frac(c);
+    else if (c < 0) s += ' − ' + frac(Math.abs(c));
+    return s;
+  }
+
+  // ============================================================
+  // NEW: SLOPE-INTERCEPT / LINE EQUATIONS
+  // ============================================================
+  function solveLine(text) {
+    // "through (2,3) with slope 4" or "through (1,2) and (3,6)"
+    const slopeM = text.match(/slope\s*(?:of|=|is)?\s*(-?\d+\.?\d*(?:\/\d+)?)/i);
+    const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
+    if (!pts || pts.length < 1) return null;
+    
+    let m, b;
+    if (slopeM && pts.length >= 1) {
+      m = parseFloat(slopeM[1]);
+      const [x1, y1] = pts[0].replace(/[()]/g, '').split(',').map(Number);
+      b = y1 - m * x1;
+    } else if (pts.length >= 2) {
+      const [a, bb] = pts.slice(0, 2).map(p => p.replace(/[()]/g, '').split(',').map(Number));
+      if (a[0] === bb[0]) return null;
+      m = (bb[1] - a[1]) / (bb[0] - a[0]);
+      b = a[1] - m * a[0];
+    } else {
+      return null;
+    }
+    
+    const mStr = frac(m);
+    const bStr = frac(b);
+    const bSign = b >= 0 ? '+ ' : '− ';
+    const eq = `y = ${mStr === '1' ? '' : mStr === '−1' ? '−' : mStr}x ${bSign}${frac(Math.abs(b))}`;
+    
+    const work = [
+      'Line equation:', '',
+      `  slope m = ${mStr}`,
+      `  y-intercept b = ${bStr}`, '',
+      'Slope-intercept form:',
+      `  ${eq}`
+    ];
+    return { answers: [{ v: 'y', val: eq.slice(4) }], work };
+  }
+
+  // ============================================================
+  // NEW: SEQUENCES (arithmetic / geometric)
+  // ============================================================
+  function solveSequence(text) {
+    const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
+    if (!nums) return null;
+    const arr = nums[0].split(',').map(s => parseFloat(s.trim()));
+    if (arr.length < 3) return null;
+    
+    const d1 = arr[1] - arr[0];
+    const d2 = arr[2] - arr[1];
+    const isArith = Math.abs(d1 - d2) < 1e-10;
+    
+    if (isArith) {
+      const d = d1;
+      const next = arr[arr.length - 1] + d;
+      const an = arr[0] + (arr.length - 1) * d;
+      const work = [
+        'Sequence:', `  ${arr.join(', ')}`, '',
+        'Common difference:', `  d = ${arr[1]} − ${arr[0]} = ${frac(d)}`,
+        `  (check: ${arr[2]} − ${arr[1]} = ${frac(d2)})`, '',
+        `Last given term (n=${arr.length}):`, `  a${arr.length} = ${frac(an)}`,
+        `Next term:`, `  a${arr.length+1} = ${frac(an)} + ${frac(d)} = ${frac(next)}`
+      ];
+      return {
+        answers: [{ v: 'd', val: frac(d) }, { v: 'next', val: frac(next) }],
+        work
+      };
+    }
+    
+    if (arr[0] !== 0) {
+      const r1 = arr[1] / arr[0];
+      const r2 = arr[2] / arr[1];
+      if (Math.abs(r1 - r2) < 1e-10) {
+        const next = arr[arr.length - 1] * r1;
+        const work = [
+          'Sequence:', `  ${arr.join(', ')}`, '',
+          'Common ratio:', `  r = ${arr[1]} / ${arr[0]} = ${frac(r1)}`,
+          `  (check: ${arr[2]} / ${arr[1]} = ${frac(r2)})`, '',
+          'Next term:', `  ${frac(arr[arr.length-1])} × ${frac(r1)} = ${frac(next)}`
+        ];
+        return {
+          answers: [{ v: 'r', val: frac(r1) }, { v: 'next', val: frac(next) }],
+          work
+        };
+      }
+    }
+    return null;
+  }
+
+  // ============================================================
+  // NEW: GEOMETRY BASIC (circle / rectangle / triangle / cylinder)
+  // ============================================================
+  function solveGeometry(text) {
+    const t = text.toLowerCase();
+    
+    // Circle: radius r, area or circumference
+    const rMatch = t.match(/radius\s*(?:of|=|is)?\s*(-?\d+\.?\d*)/i) || t.match(/r\s*=\s*(-?\d+\.?\d*)/);
+    if (rMatch && /circle/i.test(t)) {
+      const r = parseFloat(rMatch[1]);
+      const area = Math.PI * r * r;
+      const circ = 2 * Math.PI * r;
+      return {
+        answers: [{ v: 'area', val: frac(Math.round(area*100)/100) }, { v: 'circumference', val: frac(Math.round(circ*100)/100) }],
+        work: [
+          'Circle, r = ' + r, '',
+          'Area:', `  A = πr² = π(${r})² = ${frac(Math.round(area*100)/100)}`,
+          'Circumference:', `  C = 2πr = 2π(${r}) = ${frac(Math.round(circ*100)/100)}`
+        ]
+      };
+    }
+    
+    // Rectangle: length and width
+    const lM = t.match(/length\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    const wM = t.match(/width\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    if (lM && wM) {
+      const l = parseFloat(lM[1]);
+      const w = parseFloat(wM[1]);
+      return {
+        answers: [{ v: 'area', val: frac(l*w) }, { v: 'perimeter', val: frac(2*(l+w)) }],
+        work: [
+          `Rectangle, l = ${l}, w = ${w}`, '',
+          'Area:', `  A = l × w = ${l} × ${w} = ${frac(l*w)}`,
+          'Perimeter:', `  P = 2l + 2w = 2(${l}) + 2(${w}) = ${frac(2*(l+w))}`
+        ]
+      };
+    }
+    
+    // Triangle: base and height
+    const bM = t.match(/base\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    const hM = t.match(/height\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    if (bM && hM) {
+      const b = parseFloat(bM[1]);
+      const h = parseFloat(hM[1]);
+      return {
+        answers: [{ v: 'area', val: frac(b*h/2) }],
+        work: [
+          `Triangle, b = ${b}, h = ${h}`, '',
+          'Area:', `  A = ½bh = ½(${b})(${h}) = ${frac(b*h/2)}`
+        ]
+      };
+    }
+    
+    return null;
+  }
+
+  // ============================================================
   // DISPATCH
   // ============================================================
   function detect(t) {
+    // Systems first (most specific)
     if (/\bsolve the (following )?system\b/i.test(t)) return 'system';
+    if (/\bsolve\b/i.test(t) && /[<>≤≥]/.test(t) && /[a-z]\s*[<>≤≥]/.test(t)) {
+      // could be a system of inequalities — check for 2+ inequalities
+      const ineqCount = (t.match(/[<>≤≥]/g) || []).length;
+      if (ineqCount >= 2) return 'systemIneq';
+      return 'inequality';
+    }
+    
+    // Absolute value
     if (/\|.*\|/.test(t) && /\bsolve\b/i.test(t)) return 'abs';
-    if (/[<>≤≥]/.test(t) && /\bsolve\b/i.test(t)) return 'inequality';
+    
+    // Trig
+    if (/\b(sin|cos|tan)\s*\(?/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'trig';
+    
+    // Log
+    if (/\b(log|ln)\b/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'log';
+    
+    // Exponential (2^x, e^x)
+    if (/[\de]\s*\^\s*\(?\s*[a-z]/i.test(t) && /\bsolve\b/i.test(t)) return 'exp';
+    
+    // Radical
+    if (/sqrt\s*\(/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'radical';
+    
+    // Rational
+    if (/\/\s*\([^)]*x/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'rational';
+    
+    // Quadratic forms (vertex, axis, etc.)
+    if (/\b(vertex|axis of symmetry|discriminant)\b/i.test(t)) return 'quadForm';
+    
+    // Regular quadratic
     if (/x\s*[\^²]/.test(t)) return 'quadratic';
+    
+    // Composition / inverse / evaluation
+    if (/f\s*\(\s*g\s*\(\s*x\s*\)\s*\)/i.test(t)) return 'composition';
+    if (/f\s*(?:-1|⁻¹|\^\{-1\})\s*\(/i.test(t)) return 'composition';
+    if (/f\s*\(\s*x\s*\)\s*=/i.test(t)) return 'composition';
+    
+    // Statistics (list of numbers with "mean", "median", etc. keywords)
+    if (/\b(mean|median|mode|range|standard deviation|stdev)\b/i.test(t)) return 'stats';
+    
+    // Sequences
+    if (/\b(sequence|arithmetic|geometric|nth term|next term|common difference|common ratio)\b/i.test(t)) return 'sequence';
+    
+    // Line equations
+    if (/\b(slope.intercept|point.slope|equation of the line|line through)\b/i.test(t)) return 'line';
+    if (/\bslope\b/i.test(t) && /\(-?\d+\s*,\s*-?\d+\)/.test(t)) return 'slope';
+    
+    // Polynomial operations
+    if (/\b(add|subtract|multiply|divide|expand)\b/i.test(t) && /\([^)]*[a-z][^)]*\)/.test(t)) return 'polyOps';
+    
+    // Single-variable
     if (/\bsolve\b.*\bfor\b/i.test(t) || /\bsolve\b/i.test(t)) {
       const lines = t.split('\n');
       const eqLines = lines.filter(l => /[a-z]/i.test(l) && /=/.test(l));
       const sv = eqLines.filter(l => (l.match(/[a-z]/gi) || []).length === 1);
       if (sv.length) return 'single';
     }
+    
     if (/\bsimplif|rewrite in simplest|combine like terms|expand|multiply\b/i.test(t)) return 'simplify';
     if (/\bfactor/i.test(t)) return 'factor';
     if (/\bdistance\b|\bmidpoint\b/i.test(t)) return 'distance';
-    if (/\bslope\b/i.test(t) && /\(-?\d+\s*,\s*-?\d+\)/.test(t)) return 'slope';
+    
+    // Geometry fallback
+    if (/\b(area|perimeter|circumference|volume)\b/i.test(t)) return 'geometry';
+    
     return 'unknown';
   }
 
   async function run() {
     let text = problemText();
-
     const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
     if (!eqFound) {
       const imgText = await ocrImages();
@@ -628,14 +1137,27 @@ function narrateSystem(eqs, vars) {
     const nd = window.nerdamer;
     const table = {
       system: nd ? nSystem : null,
+      systemIneq: nd ? solveSystemIneq : null,
       single: nd ? nSingle : null,
       quadratic: nd ? nQuadratic : null,
+      quadForm: nd ? solveQuadForm : null,
       simplify: nd ? nSimplify : null,
       factor: nd ? nFactor : null,
       distance: manualDistance,
       slope: manualSlope,
       inequality: nd ? solveInequality : null,
       abs: nd ? solveAbsolute : null,
+      log: nd ? solveLog : null,
+      exp: nd ? solveExp : null,
+      radical: nd ? solveRadical : null,
+      rational: nd ? solveRational : null,
+      trig: nd ? solveTrig : null,
+      composition: nd ? solveComposition : null,
+      stats: solveStats,
+      sequence: solveSequence,
+      line: solveLine,
+      polyOps: nd ? solvePolyOps : null,
+      geometry: solveGeometry,
     };
     const fn = table[type];
     if (!fn) { showToast(`Unrecognized (${type})`); return; }
