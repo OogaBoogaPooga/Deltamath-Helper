@@ -39,7 +39,7 @@ You can copy the whole thing straight into your notebook.
 
 - **Copy problem screenshot** — copies the question area
 - **Read text from image** — reads text off pictures (OCR)
-- **View failed problems** — shows every problem it couldn't solve, with screenshots. If it fails on something, click "Copy all text" and make a GitHub issue so I can add it, or send me it via dc @shifyee.
+- **View failed problems** — shows every problem it couldn't solve, with screenshots. If it fails on something, click the blue "Send to Owner" button 
 - **Set / Clear Groq API key** — only needed for word problems (see below)
 - **Update from GitHub** — pulls the newest version without pasting again
 
@@ -104,7 +104,7 @@ For the visual ones, right-click the button → **Copy problem screenshot**, pas
 
 ## I found a bug / it doesn't work
 
-Right-click the `?` button → **View failed problems**. Click **Copy all text**. Send me what shows up - make a GitHub issue.
+Right-click the `?` button → **View failed problems**. Click **Send to Owner**.
 
 That gives me the exact problem text so I can add the solver.
 
