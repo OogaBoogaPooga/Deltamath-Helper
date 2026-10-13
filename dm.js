@@ -154,8 +154,19 @@
       if (/=\s*$/.test(l) && next && !/^=/.test(next) && next.length < 100) { merged.push(l + next); i++; }
       else merged.push(l);
     }
-    return merged.join('\n');
-  }
+    // split "A = B and C = D" into two lines
+    const out = [];
+    for (const l of merged) {
+      if ((l.match(/=/g) || []).length >= 2 && /\band\b/i.test(l)) {
+        const parts = l.split(/\band\b/i).map(s => s.trim()).filter(Boolean);
+        if (parts.length === 2 && parts.every(p => /=/.test(p))) {
+          parts.forEach(p => out.push(p));
+          continue;
+        }
+      }
+      out.push(l);
+    }
+    return out.join('\n');
 
   // OCR + screenshot
   function findQuestionImages() {
@@ -399,6 +410,9 @@
     const out = ['Given system:', ''];
     origLines.forEach((l, i) => out.push(`  (${i + 1})   ${l}`));
     out.push('');
+    const nd = window.nerdamer;
+
+    // 1. Look for an already-isolated variable
     let isoIdx = -1, isoVar = null, isoExpr = null;
     for (let i = 0; i < origLines.length; i++) {
       const parts = origLines[i].split('=');
@@ -410,18 +424,91 @@
       }
       if (isoVar) break;
     }
-    if (isoVar === null) return narrateSystem(eqs, vars);
+
+    // 2. If none isolated, pick a variable with coefficient ±1 in the easier equation
+    if (!isoVar) {
+      let best = null;
+      for (let i = 0; i < eqs.length; i++) {
+        for (const v of vars) {
+          const c = Math.abs(eqs[i].coef[v] || 0);
+          if (Math.abs(c - 1) < 1e-9) {
+            if (!best || c < best.coef) best = { idx: i, v, coef: c };
+          }
+        }
+      }
+      if (!best) {
+        // fall back to elimination narrator if nothing's cleanly solvable
+        return narrateSystem(eqs, vars);
+      }
+      isoIdx = best.idx;
+      isoVar = best.v;
+      // Isolate: move other terms to the right
+      const eq = eqs[isoIdx];
+      const c = eq.coef[isoVar];
+      let rhsParts = [];
+      for (const other of vars) {
+        if (other === isoVar) continue;
+        const co = eq.coef[other] || 0;
+        if (Math.abs(co) < 1e-9) continue;
+        rhsParts.push({ v: other, c: -co });
+      }
+      const kConst = -eq.rhs;
+      // Build expression string
+      const m = c;  // coefficient of isolated var
+      let exprPieces = [];
+      for (const rp of rhsParts) {
+        const cc = rp.c / m;
+        const absC = Math.abs(cc);
+        const cStr = Math.abs(absC - 1) < 1e-9 ? '' : frac(absC);
+        exprPieces.push({ sign: cc < 0 ? '−' : '+', str: cStr + rp.v, c: cc });
+      }
+      const kc = kConst / m;
+      if (Math.abs(kc) > 1e-9) exprPieces.push({ sign: kc < 0 ? '−' : '+', str: frac(Math.abs(kc)), c: kc });
+      let exprStr = '';
+      exprPieces.forEach((p, i) => {
+        if (i === 0) exprStr += (p.sign === '−' ? '−' : '') + p.str;
+        else exprStr += ' ' + p.sign + ' ' + p.str;
+      });
+      if (!exprStr) exprStr = '0';
+      isoExpr = exprStr;
+
+      // Show the isolating step
+      const eqLine = origLines[isoIdx];
+      out.push(`Solve (${isoIdx + 1}) for ${isoVar}:`);
+      out.push(`  ${eqLine}`);
+      const terms = [];
+      for (const other of vars) {
+        if (other === isoVar) continue;
+        const co = eq.coef[other] || 0;
+        if (Math.abs(co) < 1e-9) continue;
+        const absC = Math.abs(co);
+        const cStr = Math.abs(absC - 1) < 1e-9 ? '' : frac(absC);
+        terms.push({ c: co, str: cStr + other });
+      }
+      // Build "subtract X" line
+      if (terms.length) {
+        const t0 = terms[0];
+        const op = t0.c > 0 ? 'Subtract' : 'Add';
+        const tStr = Math.abs(t0.c) === 1 ? t0.str : `${Math.abs(t0.c) === 1 ? '' : frac(Math.abs(t0.c))}${t0.str.match(/[a-z]/i)[0]}`;
+        out.push(`  ${op} ${frac(Math.abs(t0.c))}${t0.str.match(/[a-z]/i)[0]} ${t0.c > 0 ? 'from' : 'to'} both sides:`.replace(/\s+/g, ' '));
+      }
+      out.push(`  ${isoVar} = ${exprStr}`);
+      out.push('');
+    } else {
+      out.push(`From (${isoIdx + 1}):   ${isoVar} = ${isoExpr}`);
+      out.push('');
+    }
+
     const otherIdx = origLines.findIndex((_, i) => i !== isoIdx);
     const otherLine = origLines[otherIdx];
     const otherVar = vars.find(v => v !== isoVar);
-    out.push(`From (${isoIdx + 1}):   ${isoVar} = ${isoExpr}`);
-    out.push('');
+
     out.push(`Substitute ${isoVar} = ${isoExpr} into (${otherIdx + 1}):`);
     out.push('');
     const subbed = otherLine.replace(new RegExp(`(?<![a-z])${isoVar}(?![a-z])`, 'gi'), `(${isoExpr})`);
     out.push(`  ${subbed}`);
     out.push('');
-    const nd = window.nerdamer;
+
     let simplified = subbed;
     try {
       const eqParts = subbed.split('=');
@@ -430,9 +517,11 @@
     out.push('Simplify:');
     out.push(`  ${simplified}`);
     out.push('');
+
     let otherVal;
     try { otherVal = nerdamerVals(nd.solve(subbed, otherVar))[0]; } catch (e) {}
     if (!otherVal) return narrateSystem(eqs, vars);
+
     try {
       const eqParts = simplified.split('=');
       const lhs = eqParts[0], rhs = parseFloat(eqParts[1]);
@@ -440,7 +529,8 @@
       const at1 = Number(nd(lhs).sub(otherVar, 1).evaluate().text('decimals'));
       const cC = at0, mC = at1 - cC;
       if (Math.abs(cC) > 1e-10) {
-        out.push(`Add ${frac(-cC)} to both sides:`);
+        const op = cC > 0 ? 'Subtract' : 'Add';
+        out.push(`${op} ${frac(Math.abs(cC))} ${cC > 0 ? 'from' : 'to'} both sides:`);
         out.push(`  ${frac(mC)}${otherVar} = ${frac(rhs - cC)}`);
         out.push('');
       }
@@ -450,211 +540,20 @@
         out.push('');
       }
     } catch (e) {}
+
     out.push(`  ${otherVar} = ${otherVal}`);
     out.push('');
+
     out.push(`Substitute ${otherVar} = ${otherVal} into (${isoIdx + 1}):`);
     out.push(`  ${isoVar} = ${isoExpr}`);
     let isoVal = '?';
     try { isoVal = nerdamerVals(nd(isoExpr).sub(otherVar, otherVal).evaluate())[0] || '?'; } catch (e) {}
     out.push(`  ${isoVar} = ${isoVal}`);
     out.push('');
+
     const sol = {}; sol[isoVar] = isoVal; sol[otherVar] = otherVal;
-    out.push(`Solution:   ${vars.map(v => `${v} = ${sol[v]}`).join(',   ')}`);
+    out.push(`Solution:   ${(isoVar < otherVar ? [isoVar, otherVar] : [otherVar, isoVar]).map(v => `${v} = ${sol[v]}`).join(',   ')}`);
     return { answers: vars.map(v => ({ v, val: sol[v] })), work: out };
-  }
-
-  // SOLVERS
-  function nSystem(text) {
-    const isSub = /by substitution/i.test(text);
-    const lines = text.split('\n').filter(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
-    const eqs = [], origLines = [];
-    for (const l of lines) {
-      const eq = parseEqFull(l);
-      if (eq && Object.keys(eq.coef).length > 0) { eqs.push(eq); origLines.push(l); }
-    }
-    if (eqs.length < 2) return null;
-    const varSet = new Set();
-    for (const e of eqs) for (const v of Object.keys(e.coef)) varSet.add(v);
-    const vars = [...varSet].sort();
-    if (eqs.length !== vars.length) return null;
-    try { return isSub ? narrateSubstitution(eqs, vars, origLines) : narrateSystem(eqs, vars); }
-    catch (err) { console.warn('[vite] narrate error', err); return null; }
-  }
-
-  function nSingle(text) {
-    const nd = window.nerdamer;
-    const eqLine = text.split('\n').find(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
-    if (!eqLine) { console.log('[vite] nSingle: no equation line'); return null; }
-    let eq = cleanLine(eqLine);
-    eq = eq.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, '($1/$2)');
-    console.log('[vite] nSingle: solving', eq);
-    const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
-    if (vars.length !== 1) { console.log('[vite] nSingle: not single-var', vars); return null; }
-    const v = vars[0];
-    let sol;
-    try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
-    const vals = nerdamerVals(sol);
-    if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
-    const answer = { v, val: vals.join(', ') };
-    const parts = eq.split('=');
-    if (parts.length !== 2) return { answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] };
-    const lhsRaw = parts[0].trim(), rhsRaw = parts[1].trim();
-    function toNum(o) { try { return Number(o.text('decimals')); } catch (e) { return Number(o.toString()); } }
-    function analyze(expr) {
-      try {
-        const f0 = toNum(nd(expr).sub(v, 0).evaluate());
-        const f1 = toNum(nd(expr).sub(v, 1).evaluate());
-        const f2 = toNum(nd(expr).sub(v, 2).evaluate());
-        if (Math.abs((f2 - f1) - (f1 - f0)) > 1e-7) return null;
-        return { coef: f1 - f0, constant: f0 };
-      } catch (e) { return null; }
-    }
-    function fmtLin(a, b) {
-      const out = [];
-      if (Math.abs(a) > 1e-10) { if (Math.abs(a - 1) < 1e-10) out.push(v); else if (Math.abs(a + 1) < 1e-10) out.push('−' + v); else out.push(frac(a) + v); }
-      if (Math.abs(b) > 1e-10) { if (out.length === 0) out.push(frac(b)); else out.push((b < 0 ? '−' : '+') + ' ' + frac(Math.abs(b))); }
-      if (out.length === 0) out.push('0');
-      return out.join(' ');
-    }
-    function expanded(expr) {
-      try {
-        return nd(expr).expand().toString().replace(/(\d)\s*\*\s*([a-z])/g, '$1$2').replace(/\s*\*\s*/g, ' ').replace(/\s*\+\s*/g, ' + ').replace(/\s*-\s*/g, ' − ').replace(/−\s*−/g, '+').trim();
-      } catch (e) { return null; }
-    }
-    const L = analyze(lhsRaw), R = analyze(rhsRaw);
-    if (!L || !R) return { answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] };
-    const work = ['Equation:', '  ' + eq, ''];
-    const hasParens = /\(/.test(eq);
-    let workingL = L, workingR = R;
-    if (hasParens) {
-      const lhsExp = expanded(lhsRaw), rhsExp = expanded(rhsRaw);
-      work.push('Distribute and combine like terms:');
-      if (lhsExp && rhsExp) work.push(`  ${lhsExp} = ${rhsExp}`);
-      else work.push(`  ${fmtLin(L.coef, L.constant)} = ${fmtLin(R.coef, R.constant)}`);
-      work.push('');
-    }
-    if (Math.abs(workingL.coef) < 1e-10 && Math.abs(workingR.coef) > 1e-10) {
-      const a = workingR.coef, b = workingR.constant, c = workingL.constant;
-      if (hasParens) { work.push('Rewrite with the variable on the left:'); work.push(`  ${fmtLin(a, b)} = ${frac(c)}`); work.push(''); }
-      if (Math.abs(b) > 1e-10) { work.push(`Subtract ${frac(b)} from both sides:`); work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`); work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`); work.push(''); }
-      if (Math.abs(a - 1) > 1e-10) { if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)}:`); else work.push(`Divide both sides by ${frac(a)}:`); work.push(`  ${v} = ${frac((c - b) / a)}`); work.push(''); }
-    } else if (Math.abs(workingR.coef) < 1e-10 && Math.abs(workingL.coef) > 1e-10) {
-      const a = workingL.coef, b = workingL.constant, c = workingR.constant;
-      if (Math.abs(b) > 1e-10) { work.push(`Subtract ${frac(b)} from both sides:`); work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`); work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`); work.push(''); }
-      if (Math.abs(a - 1) > 1e-10) { if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)}:`); else work.push(`Divide both sides by ${frac(a)}:`); work.push(`  ${v} = ${frac((c - b) / a)}`); work.push(''); }
-    } else if (Math.abs(workingL.coef) > 1e-10 && Math.abs(workingR.coef) > 1e-10) {
-      const a1 = workingL.coef, b1 = workingL.constant, a2 = workingR.coef, b2 = workingR.constant;
-      const a = a1 - a2, b = b1, c = b2;
-      work.push(`Subtract ${frac(a2)}${v} from both sides:`);
-      work.push(`  ${fmtLin(a1, b1)} − ${frac(a2)}${v} = ${fmtLin(a2, b2)} − ${frac(a2)}${v}`);
-      work.push(`  ${fmtLin(a, b)} = ${frac(c)}`); work.push('');
-      if (Math.abs(b) > 1e-10) { work.push(`Subtract ${frac(b)} from both sides:`); work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`); work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`); work.push(''); }
-      if (Math.abs(a - 1) > 1e-10) { if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)}:`); else work.push(`Divide both sides by ${frac(a)}:`); work.push(`  ${v} = ${frac((c - b) / a)}`); work.push(''); }
-    }
-    work.push(`Solution:   ${v} = ${vals.join(', ')}`);
-    return { answers: [answer], work };
-  }
-
-  function nQuadratic(text) {
-    const nd = window.nerdamer;
-    const m = text.match(/([^\n]*x\s*[\^²][^\n]*)/i);
-    if (!m) return null;
-    let eq = cleanLine(m[1]).replace(/x\s*²/g, 'x^2');
-    if (!eq.includes('=')) eq += '=0';
-    let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const vals = nerdamerVals(sol);
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work: ['Equation:', `  ${eq}`, '', 'Solutions:', ...vals.map(v => `  x = ${v}`)] };
-  }
-
-  function nSimplify(text) {
-    const nd = window.nerdamer;
-    const m = text.match(/([^\n]*(?:[a-z]|[\(\)])[^\n]*)/i);
-    if (!m) return null;
-    const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '');
-    let out; try { out = nd(expr).toString(); } catch (err) { return null; }
-    return { answers: [{ v: 'simplified', val: out }], work: ['Original:', `  ${expr}`, '', 'Simplified:', `  ${out}`] };
-  }
-
-  function nFactor(text) {
-    const nd = window.nerdamer;
-    const m = text.match(/([^\n]*(?:x|[a-z])[^\n]*)/i);
-    if (!m) return null;
-    const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '').replace(/=0$/, '');
-    let out; try { out = nd(`factor(${expr})`).toString(); } catch (err) { return null; }
-    return { answers: [{ v: 'factored', val: out }], work: ['Original:', `  ${expr}`, '', 'Factored:', `  ${out}`] };
-  }
-
-  function manualDistance(text) {
-    const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
-    if (!pts || pts.length < 2) return null;
-    const [a, b] = pts.slice(0, 2).map(p => p.replace(/[()]/g, '').split(',').map(Number));
-    const dx = b[0] - a[0], dy = b[1] - a[1], dist = Math.hypot(dx, dy);
-    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    return { answers: [{ v: 'distance', val: frac(dist) }, { v: 'midpoint', val: `(${frac(mid[0])}, ${frac(mid[1])})` }],
-      work: ['Points:', `  (${a[0]}, ${a[1]})   (${b[0]}, ${b[1]})`, '', 'Distance:', `  d = √((${dx})² + (${dy})²) = ${frac(dist)}`, '', 'Midpoint:', `  M = ((${a[0]}+${b[0]})/2, (${a[1]}+${b[1]})/2) = (${frac(mid[0])}, ${frac(mid[1])})`] };
-  }
-
-  function manualSlope(text) {
-    const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
-    if (!pts || pts.length < 2) return null;
-    const [a, b] = pts.slice(0, 2).map(p => p.replace(/[()]/g, '').split(',').map(Number));
-    const dy = b[1] - a[1], dx = b[0] - a[0];
-    const slope = dx === 0 ? 'undefined' : frac(dy / dx);
-    return { answers: [{ v: 'slope', val: slope }],
-      work: ['Points:', `  (${a[0]}, ${a[1]})   (${b[0]}, ${b[1]})`, '', 'm = (y₂ − y₁) / (x₂ − x₁)', `  m = (${b[1]} − ${a[1]}) / (${b[0]} − ${a[0]})`, `  m = ${dy} / ${dx}`, `  m = ${slope}`] };
-  }
-
-  function solveInequality(text) {
-    const m = text.match(/([^\n]*[<>≤≥][^\n]*)/);
-    if (!m) return null;
-    let ineq = cleanLine(m[1]).replace(/≤/g, '<=').replace(/≥/g, '>=');
-    const vars = [...new Set(ineq.match(/[a-z]/gi) || [])];
-    if (vars.length !== 1) return null;
-    const v = vars[0].toLowerCase();
-    const opMatch = ineq.match(/<=|>=|<|>/);
-    const op = opMatch ? opMatch[0] : '=';
-    const eq = ineq.replace(/<=|>=|<|>/, '=');
-    let sol; try { sol = window.nerdamer.solve(eq, v); } catch (err) { return null; }
-    const vals = nerdamerVals(sol);
-    const boundary = vals.join(', ');
-    return { answers: [{ v, val: `${op} ${boundary}` }],
-      work: ['Inequality:', `  ${ineq}`, '', 'Solve the boundary equation:', `  ${eq}`, `  ${v} = ${boundary}`, '', 'Answer:', `  ${v} ${op} ${boundary}`] };
-  }
-
-  // COMPOUND INEQUALITY
-  function solveCompoundIneq(text) {
-    const m = text.match(/(-?\d+\.?\d*)\s*([<>]\s*=?)\s*([^<>\n]+?)\s*([<>]\s*=?)\s*(-?\d+\.?\d*)/);
-    if (!m) return null;
-    const aStr = m[1], op1 = m[2].replace(/\s/g, ''), midStr = m[3].trim(), op2 = m[4].replace(/\s/g, ''), bStr = m[5];
-    const a = parseFloat(aStr), b = parseFloat(bStr);
-    const nd = window.nerdamer;
-    const mid = midStr.replace(/\s/g, '');
-    let cC, mC;
-    try {
-      cC = Number(nd(mid).sub('x', 0).evaluate().text('decimals'));
-      mC = Number(nd(mid).sub('x', 1).evaluate().text('decimals')) - cC;
-    } catch (e) { return null; }
-    if (Math.abs(mC) < 1e-10) return null;
-    let e1Op = flipOp(op1), e2Op = op2;
-    if (mC < 0) { e1Op = flipOp(e1Op); e2Op = flipOp(e2Op); }
-    const v1 = (a - cC) / mC, v2 = (b - cC) / mC;
-    let low, high, loOp, hiOp;
-    if (v1 <= v2) { low = v1; loOp = e1Op; high = v2; hiOp = e2Op; }
-    else { low = v2; loOp = e2Op; high = v1; hiOp = e1Op; }
-    const ans = `${frac(low)} ${loOp} x ${hiOp} ${frac(high)}`;
-    const work = ['Compound inequality:', `  ${aStr} ${op1} ${midStr} ${op2} ${bStr}`, ''];
-    if (Math.abs(cC) > 1e-10) {
-      work.push(`Subtract ${frac(cC)} from all three parts:`);
-      work.push(`  ${frac(a - cC)} ${op1} ${frac(mC)}x ${op2} ${frac(b - cC)}`);
-      work.push('');
-    }
-    if (Math.abs(mC - 1) > 1e-10 && Math.abs(mC) > 1e-10) {
-      work.push(mC < 0 ? `Divide all three parts by ${frac(mC)} (flip both inequalities):` : `Divide all three parts by ${frac(mC)}:`);
-      work.push(`  ${frac(a)} / ${frac(mC)} ${op1} x ${op2} ${frac(b)} / ${frac(mC)}`);
-      work.push('');
-    }
-    work.push('Solution:', `  ${ans}`);
-    return { answers: [{ v: 'x', val: ans }], work };
   }
 
   // ABSOLUTE VALUE EQUATION
