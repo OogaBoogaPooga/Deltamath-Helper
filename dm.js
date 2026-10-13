@@ -167,6 +167,7 @@
       out.push(l);
     }
     return out.join('\n');
+  }
 
   // OCR + screenshot
   function findQuestionImages() {
