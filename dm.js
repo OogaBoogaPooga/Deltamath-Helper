@@ -307,11 +307,15 @@
         counter++;
         const newLabel = String(counter);
 
-        out.push(sameSign ? `  Subtract (${A.label}) from (${B.label}):` : `  Add the two equations:`);
+        const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
+        const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
         if (sameSign) {
-          out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
+        out.push(`  Subtract ${aDesc} from ${bDesc}:`);
+        out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
         } else {
-          out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
+        out.push(`  Add ${aDesc} and ${bDesc}:`);
+        out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
+        }
         }
         out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
         out.push('');
