@@ -1,8 +1,6 @@
 # delta-math-helper
 
-Ever get stuck on a DeltaMath problem? This gives you the answer **and** the full work — the exact steps to write down for credit.
-
-No app to install. No extensions. Just paste one line into your browser and click a button.
+Solve any DeltaMath problem and get the full work — no install, just paste one line into your browser.
 
 ---
 
@@ -10,17 +8,17 @@ No app to install. No extensions. Just paste one line into your browser and clic
 
 **Step 1.** Open your DeltaMath problem like normal.
 
-**Step 2.** Press `F12` on your keyboard to open the console. (On Chromebook, press `Ctrl + shift + I`.)
+**Step 2.** Press `F12` to open DevTools. (On Mac: `Cmd + Option + I`.)
 
 **Step 3.** Click the **Console** tab at the top.
 
-**Step 4.** Copy this line, paste it in, and hit Enter:
+**Step 4.** Paste this line, hit Enter:
 
 ```js
-fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
+fetch('https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/dm.js').then(r=>r.text()).then(eval)
 ```
 
-**Step 5.** Look at the bottom-right corner of the page. A small round button appears.
+**Step 5.** A small circular button appears in the bottom-right corner.
 
 **Step 6.** Click it. You get the answer and the full work.
 
@@ -33,43 +31,73 @@ That's it.
 A popup with two parts:
 
 1. **The answer** — big and clear, like `x = 3, y = -2, z = 5`
-2. **A "Show work" button** — click it and you get every single step, written exactly the way you'd write it on paper. Copy it straight to your notebook.
+2. **A "Show work" button** — click it and you get every step, written the way you'd write it in a notebook. Copy it straight to your paper.
 
-You can press **Esc** to close the popup, or click anywhere outside it.
+The work is printed in stacked form — equations line up on the `=`, the `+` or `−` sign sits in front of the second row, a divider line separates it from the result. No matrices, no row-operation notation, no jargon. Every line is something you'd actually write.
+
+Press **Esc** or click outside the popup to close it.
 
 ---
 
 ## Right-click the button for extras
 
 - **Copy problem screenshot** — if the problem has a graph or picture, this copies it so you can paste it into ChatGPT or any AI to ask about it.
-- **Read text from image** — if the equation is inside a picture, this reads it for you.
-- **Update from GitHub** — gets the newest version without re-pasting.
+- **Read text from image (OCR)** — if the equation is inside a picture, this reads it automatically.
+- **Update from GitHub** — pulls the newest version without re-pasting.
 
 ---
 
-## What it can solve
+## What it solves
 
-- Systems of equations (2 or 3 variables, sometimes more)
-- Regular equations like `3x + 5 = 20`
-- Quadratic equations (`x² + 5x + 6 = 0`)
-- Inequalities (`2x + 3 > 7`)
-- Absolute value (`|x - 3| = 7`)
-- Simplifying and factoring
-- Distance, midpoint, and slope between two points
-- Equations shown as pictures (using built-in OCR)
+| Type | Status |
+|---|---|
+| Systems of equations (2×2 to 4×4) | ✅ Full stacked work |
+| Single-variable equations (`3x + 5 = 20`) | ✅ |
+| Quadratics (`x² + 5x + 6 = 0`) | ✅ |
+| Inequalities (`2x + 3 > 7`) | ✅ |
+| Absolute value (`\|x − 3\| = 7`) | ✅ |
+| Simplify / expand / combine like terms | ✅ |
+| Factor | ✅ |
+| Distance, midpoint, slope | ✅ |
+| Equations shown as images | ✅ via OCR |
 
-**Can't solve:** graph problems, word problems, and trig/log stuff. For those, use the right-click **Copy problem screenshot** and ask an AI directly.
+**Not supported:** graph problems, word problems, trig, logs, exponentials, geometry, statistics. For those, use **Copy problem screenshot** and ask an AI.
 
 ---
 
-## What it does NOT do
+## Example output
 
-- It doesn't submit anything for you.
-- It doesn't touch your account.
-- It doesn't send your data anywhere.
-- It doesn't change anything on DeltaMath.
+For the system `−7x − 7y + z = 5`, `4x + 4y − z = −5`, `9x + 10y − z = −2`:
 
-It just reads what's already on your screen and does the math for you. Like a really fast calculator.
+```
+Given system:
+
+  (1)   −7x − 7y + z = 5
+  (2)   4x + 4y − z = −5
+  (3)   9x + 10y − z = −2
+
+Step 1: Eliminate x
+
+  Stack (1) and (2):
+    (1)   −7x − 7y + z = 5
+    (2)   4x + 4y − z = −5
+
+  Multiply to match x-coefficients:
+    4 × (1):   −28x − 28y + 4z = 20
+    7 × (2):    28x + 28y − 7z = −35
+
+  Add 4 × (1) and 7 × (2):
+      −28x − 28y + 4z = 20
+    +  28x + 28y − 7z = −35
+    ─────────────────────────
+      −3z = −15     (4)
+
+  ...
+
+Solution:   x = −3,   y = 3,   z = 5
+```
+
+Copy the whole block into your notebook. Every line is already in handwritten form.
 
 ---
 
@@ -83,7 +111,18 @@ Do this once:
 4. Paste the entire `dm.js` file in there.
 5. Press **Ctrl + Enter** (or `Cmd + Enter`) to run.
 
-Now it's saved forever. Next time you open DeltaMath, just click the snippet and hit `Ctrl + Enter`. One second.
+Now it's saved forever. Next time you open DeltaMath, click the snippet, hit `Ctrl + Enter`, done in a second.
+
+---
+
+## What it does NOT do
+
+- Doesn't submit anything for you
+- Doesn't touch your account
+- Doesn't send your data anywhere
+- Doesn't change anything on DeltaMath
+
+It reads what's already on your screen and does the math. Like a really fast calculator that shows its work.
 
 ---
 
@@ -93,18 +132,20 @@ If the button doesn't appear, or it says it can't solve the problem:
 
 1. Press `F12` to open the console
 2. Look for lines that start with `[vite]`
-3. Copy what it says and create an issue
+3. Copy what it says and send it in
 
-That tells me exactly what went wrong.
+That shows exactly what went wrong.
 
 ---
 
-## Setup (for whoever is hosting this)
+## Hosting it yourself
 
-1. Create a new GitHub repo (make it public)
+1. Create a new public GitHub repo
 2. Add `dm.js` to the repo
-3. Replace `YOURUSER/YOURREPO` in the loader line above with your real GitHub username and repo name
+3. Replace `YOURUSER/YOURREPO` in the loader line at the top of this README with your real GitHub username and repo name
 4. Done — the paste-in line now works for anyone you share it with
+
+The button styling, self-update URL, and everything else is already configured inside `dm.js`.
 
 ---
 
