@@ -9,7 +9,7 @@ No install, no extension, no account. Just paste a line into the browser console
 ## How to use it
 
 1. Open a DeltaMath problem like normal.
-2. Press `F12` (or `Cmd + Option + I` on a Mac) to open the console.
+2. Press `F12` (or `Ctrl + Shift + I` on a Chromebook) to open the console.
 3. Click the **Console** tab.
 4. Paste this in and hit Enter:
 
