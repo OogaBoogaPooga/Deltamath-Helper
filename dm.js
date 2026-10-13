@@ -253,6 +253,34 @@
     return out + ' = ' + frac(eq.rhs);
   }
 
+  // builds the "expanded" line showing each term before combining
+  function expandedLine(P, Q, op, vars) {
+    const terms = [];
+    for (const v of vars) {
+      const c = P.coef[v] || 0;
+      if (Math.abs(c) < 1e-10) continue;
+      const absC = Math.abs(c);
+      const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+      terms.push({ c, t: cStr + v });
+    }
+    for (const v of vars) {
+      const c = Q.coef[v] || 0;
+      if (Math.abs(c) < 1e-10) continue;
+      const effC = op === '-' ? -c : c;
+      const absC = Math.abs(effC);
+      const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
+      terms.push({ c: effC, t: cStr + v });
+    }
+    let lhs = '';
+    terms.forEach((term, i) => {
+      if (i === 0) lhs += (term.c < 0 ? '−' : '') + term.t;
+      else lhs += (term.c < 0 ? ' − ' : ' + ') + term.t;
+    });
+    if (!lhs) lhs = '0';
+    const rhsVal = op === '-' ? P.rhs - Q.rhs : P.rhs + Q.rhs;
+    return `${lhs} = ${frac(rhsVal)}`;
+  }
+
   // ============================================================
   // PAPER-STYLE ELIMINATION
   // ============================================================
@@ -260,7 +288,9 @@
     const out = [];
     out.push('Given system:');
     out.push('');
-    for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
+    for (let i = 0; i < eqs.length; i++) {
+      out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
+    }
     out.push('');
 
     let rows = eqs.map((e, i) => ({ coef: { ...e.coef }, rhs: e.rhs, label: String(i + 1) }));
@@ -277,7 +307,7 @@
       }
       if (!allValid) break;
 
-      out.push(`Step ${stepIdx + 1}:  Eliminate ${elimVar}.`);
+      out.push(`Step ${stepIdx + 1}: Eliminate ${elimVar}`);
       out.push('');
 
       const nextRows = [];
@@ -300,8 +330,8 @@
 
         if (mA !== 1 || mB !== 1) {
           out.push(`  Multiply to match ${elimVar}-coefficients:`);
-          if (mA !== 1) out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
-          if (mB !== 1) out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
+          out.push(`    ${mA} × (${A.label}):   ${fmtEq(A2, vars)}`);
+          out.push(`    ${mB} × (${B.label}):   ${fmtEq(B2, vars)}`);
           out.push('');
         }
 
@@ -310,14 +340,17 @@
 
         const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
         const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
+
         if (sameSign) {
           out.push(`  Subtract ${aDesc} from ${bDesc}:`);
           out.push(`    (${fmtEq(B2, vars)}) − (${fmtEq(A2, vars)})`);
+          out.push(`    ${expandedLine(B2, A2, '-', vars)}`);
         } else {
           out.push(`  Add ${aDesc} and ${bDesc}:`);
           out.push(`    (${fmtEq(A2, vars)}) + (${fmtEq(B2, vars)})`);
+          out.push(`    ${expandedLine(A2, B2, '+', vars)}`);
         }
-        out.push(`    ${fmtEq(result, vars)}     ... (${newLabel})`);
+        out.push(`    ${fmtEq(result, vars)}     (${newLabel})`);
         out.push('');
 
         nextRows.push({ coef: result.coef, rhs: result.rhs, label: newLabel });
@@ -355,11 +388,14 @@
         const val = rhsAfter / cV;
         sol[v] = val;
 
-        out.push(`From (${row.label}):   ${fmtEq(row, vars)}`);
+        out.push(`From (${row.label}):`);
+        out.push(`  ${fmtEq(row, vars)}`);
+        out.push('');
 
         if (knownSubs.length > 0) {
           out.push(`  Substitute ${knownSubs.join(', ')}:`);
 
+          // line 1: parens
           let subLine = '', first = true;
           for (const vv of vars) {
             const c = row.coef[vv] || 0;
@@ -379,6 +415,7 @@
           }
           out.push(`    ${subLine} = ${frac(row.rhs)}`);
 
+          // line 2: evaluated
           let evalLine = '', first2 = true;
           for (const vv of vars) {
             const c = row.coef[vv] || 0;
@@ -399,6 +436,7 @@
           }
           if (evalLine !== subLine) out.push(`    ${evalLine} = ${frac(row.rhs)}`);
 
+          // line 3: combined
           if (Math.abs(sumKnown) > 1e-10) {
             const absC = Math.abs(cV);
             const cStr = Math.abs(absC - 1) < 1e-10 ? '' : frac(absC);
@@ -406,10 +444,9 @@
             if (combinedLine !== evalLine) out.push(`    ${combinedLine} = ${frac(row.rhs)}`);
           }
 
+          // line 4: isolate v
           if (Math.abs(cV - 1) > 1e-10) {
-            let cVStr;
-            if (Math.abs(cV + 1) < 1e-10) cVStr = '−';
-            else cVStr = frac(cV);
+            const cVStr = Math.abs(cV + 1) < 1e-10 ? '−' : frac(cV);
             out.push(`    ${cVStr}${v} = ${frac(rhsAfter)}`);
           }
         } else {
