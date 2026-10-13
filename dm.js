@@ -45,6 +45,12 @@
   }
   loadScript(CDN.nerdamer, 'nerdamer', () => { if (window.nerdamer) console.log('%c[vite] nerdamer ready', 'color:#8a8a8a'); });
   loadScript(CDN.tesseract, 'tesseract', () => { if (window.Tesseract) console.log('%c[vite] ocr ready', 'color:#8a8a8a'); });
+    loadScript([
+    'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+    'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js',
+  ], 'html2canvas', () => {
+    if (window.html2canvas) console.log('%c[vite] html2canvas ready', 'color:#8a8a8a');
+  });
 
   // BUTTON
   const btn = document.createElement('div');
@@ -1396,7 +1402,138 @@ Rules:
     (data.work || []).forEach(line => work.push(`  ${line}`));
     return { answers, work };
   }
+  // ============================================================
+  // FAILURE LOG — captures problems the solver can't handle
+  // ============================================================
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('dm_fails', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('fails')) {
+          const store = db.createObjectStore('fails', { keyPath: 'id', autoIncrement: true });
+          store.createIndex('time', 'time');
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbAdd(entry) {
+    try {
+      const db = await openDB();
+      return new Promise(res => {
+        const tx = db.transaction('fails', 'readwrite');
+        tx.objectStore('fails').add(entry);
+        tx.oncomplete = () => res();
+      });
+    } catch (e) { console.warn('[vite] fail log add', e); }
+  }
+  async function dbAll() {
+    try {
+      const db = await openDB();
+      return new Promise(res => {
+        const tx = db.transaction('fails', 'readonly');
+        const req = tx.objectStore('fails').getAll();
+        req.onsuccess = () => res(req.result || []);
+        req.onerror = () => res([]);
+      });
+    } catch (e) { return []; }
+  }
+  async function dbClear() {
+    try {
+      const db = await openDB();
+      return new Promise(res => {
+        const tx = db.transaction('fails', 'readwrite');
+        tx.objectStore('fails').clear();
+        tx.oncomplete = () => res();
+      });
+    } catch (e) {}
+  }
 
+  async function logFailure(problem, type) {
+    let screenshot = null;
+    try {
+      if (window.html2canvas) {
+        let target = null;
+        for (const el of document.querySelectorAll('div,section,main')) {
+          const t = el.innerText || '';
+          if (t.length < 60 || t.length > 5000) continue;
+          if (/\bQuestion\b/.test(t) && (/\bAnswer\b|\bSubmit\b/.test(t))) {
+            if (!target || t.length < (target.innerText || '').length) target = el;
+          }
+        }
+        if (target) {
+          const canvas = await window.html2canvas(target, { scale: 1, logging: false, useCORS: true, backgroundColor: '#ffffff' });
+          screenshot = canvas.toDataURL('image/png');
+        }
+      }
+    } catch (e) { console.warn('[vite] screenshot failed', e); }
+
+    await dbAdd({
+      time: Date.now(),
+      url: location.href,
+      type,
+      problem,
+      screenshot,
+    });
+    console.log('%c[vite] failure logged', 'color:#c49a3a');
+  }
+
+  async function showFailLog() {
+    const fails = await dbAll();
+    const old = document.getElementById('__dm_fails'); if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = '__dm_fails';
+    wrap.style.cssText = `position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483002;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+
+    const items = fails.sort((a, b) => b.time - a.time).map(f => `
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:6px">
+          <span>${new Date(f.time).toLocaleString()}</span>
+          <span style="font-family:monospace;color:#c49a3a">${f.type}</span>
+        </div>
+        <pre style="margin:0;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:#333;max-height:160px;overflow:auto;background:#fff;padding:8px;border-radius:4px;border:1px solid #e5e7eb">${f.problem}</pre>
+        ${f.screenshot ? `<div style="margin-top:8px"><img src="${f.screenshot}" style="max-width:100%;border:1px solid #ddd;border-radius:6px"></div>` : '<em style="color:#999;font-size:12px">no screenshot</em>'}
+      </div>`).join('') || '<div style="padding:20px;text-align:center;color:#666">No failures logged yet.</div>';
+
+    const box = document.createElement('div');
+    box.style.cssText = `background:#fff;color:#111;border-radius:10px;padding:22px 26px;min-width:640px;max-width:920px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);`;
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
+        <div style="font-family:Georgia,serif;font-size:20px;font-weight:600">Failed problems (${fails.length})</div>
+        <div>
+          <button id="__dm_f_copy" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px">Copy all text</button>
+          <button id="__dm_f_dl" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px">Download JSON</button>
+          <button id="__dm_f_clear" style="padding:6px 12px;margin-right:6px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px;color:#b91c1c">Clear</button>
+          <button id="__dm_f_close" style="padding:6px 12px;border:1px solid #d1d5db;background:#fff;border-radius:6px;cursor:pointer;font-size:12px">Close</button>
+        </div>
+      </div>
+      <div style="overflow:auto;flex:1">${items}</div>`;
+    wrap.appendChild(box);
+    document.body.appendChild(wrap);
+
+    box.querySelector('#__dm_f_close').onclick = () => wrap.remove();
+    box.querySelector('#__dm_f_clear').onclick = async () => {
+      if (!confirm('Clear all logged failures?')) return;
+      await dbClear(); wrap.remove(); showToast('cleared');
+    };
+    box.querySelector('#__dm_f_copy').onclick = () => {
+      const text = fails.map((f, i) =>
+        `--- Failure #${i + 1} (${new Date(f.time).toLocaleString()}) ---\nType: ${f.type}\nURL: ${f.url}\n\nProblem text:\n${f.problem}\n`
+      ).join('\n\n');
+      navigator.clipboard.writeText(text).then(() => showToast('copied text'));
+    };
+    box.querySelector('#__dm_f_dl').onclick = () => {
+      const blob = new Blob([JSON.stringify(fails, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'dm-failures-' + Date.now() + '.json';
+      a.click();
+    };
+  }
+  
   // ============================================================
   // DISPATCH
   // ============================================================
@@ -1505,11 +1642,18 @@ Rules:
       word: solveWordProblem,
     };
     const fn = table[type];
-    if (!fn) { showToast(`Unrecognized (${type})`); return; }
+    if (!fn) {
+      showToast(`Unrecognized (${type})`);
+      logFailure(text, type);
+      return;
+    }
     let r; try { r = await fn(text); } catch (e) { console.warn(e); r = null; }
-    if (!r) { showToast(`Couldn't solve (${type})`); return; }
+    if (!r) {
+      showToast(`Couldn't solve (${type})`);
+      logFailure(text, type);
+      return;
+    }
     showModal(r);
-  }
 
   // MENU
   function openMenu() {
@@ -1522,6 +1666,7 @@ Rules:
       ['Read text from image (OCR)', async () => { const t = await ocrImages(); showToast(t ? 'read' : 'no image'); }],
       ['Set Groq API key', () => promptForKey()],
       ['Clear Groq API key', () => { clearGroqKey(); showToast('key cleared'); }],
+      ['View failed problems', () => showFailLog()],
       ['Update from GitHub', () => selfUpdate()],
     ];
     items.forEach(([label, fn]) => {
