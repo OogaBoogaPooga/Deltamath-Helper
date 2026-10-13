@@ -141,6 +141,14 @@
     return String(s).replace(/[\u2212\u2013\u2014\u2015]/g, '-').replace(/[\u00a0\u2007\u202f]/g, ' ')
       .replace(/×/g, '*').replace(/÷/g, '/').replace(/√/g, 'sqrt').replace(/[ \t]+/g, ' ').trim();
   }
+  // strip Nerdamer's array wrapping "[x]" and surrounding whitespace
+  function unwrap(s) {
+    return String(s).replace(/^\[|\]$/g, '').trim();
+  }
+  function nerdamerVals(sol) {
+    const list = Array.isArray(sol) ? sol : [sol];
+    return list.map(x => unwrap(x.toString())).filter(v => v !== '');
+  }
 
   // ============================================================
   // MATH DOM WALKER — handles MathQuill, KaTeX, MathML
@@ -153,7 +161,6 @@
     const cls = typeof node.className === 'string' ? node.className : '';
     const tag = (node.tagName || '').toLowerCase();
 
-    // ----- MathQuill -----
     if (/mq-fraction/.test(cls)) {
       const num = node.querySelector('.mq-numerator');
       const den = node.querySelector('.mq-denominator');
@@ -174,8 +181,6 @@
     if (/\bmq-sup\b|\bmq-sub\b|\bmq-numerator\b|\bmq-denominator\b|\bmq-fraction-bar\b|\bmq-cursor\b/.test(cls)) {
       return '';
     }
-
-    // ----- KaTeX -----
     if (/\bkatex\b/.test(cls) && !/katex-mathml|katex-html|katex-display/.test(cls)) {
       const mml = node.querySelector('.katex-mathml');
       if (mml) return walkMath(mml);
@@ -192,8 +197,6 @@
       const math = node.querySelector('math');
       return math ? walkMath(math) : '';
     }
-
-    // ----- MathML -----
     if (tag === 'mfrac') {
       const kids = Array.from(node.children);
       return '(' + walkMath(kids[0]) + ')/(' + walkMath(kids[1]) + ')';
@@ -223,7 +226,6 @@
     }
     if (tag === 'annotation' || tag === 'annotation-xml') return '';
 
-    // ----- default -----
     let out = '';
     for (const c of node.childNodes) out += walkMath(c);
     return out;
@@ -233,20 +235,15 @@
   // PROBLEM TEXT + OCR
   // ============================================================
   function problemText() {
-    // Clone the body so we can safely mutate for text extraction
     const clone = document.body.cloneNode(true);
     clone.querySelectorAll('script, style, noscript, link, meta, svg').forEach(n => n.remove());
 
-    // Replace every rendered math element with its reconstructed plain-text form
     clone.querySelectorAll('.katex, .mq-root-block, math, .MathJax, .MathJax_Preview').forEach(el => {
       if (!el.parentNode) return;
       const txt = walkMath(el);
-      if (txt && txt.trim()) {
-        el.replaceWith(document.createTextNode(' ' + txt + ' '));
-      }
+      if (txt && txt.trim()) el.replaceWith(document.createTextNode(' ' + txt + ' '));
     });
 
-    // Off-screen render so innerText computes correctly
     const hidden = document.createElement('div');
     hidden.style.cssText = 'position:absolute;left:-99999px;top:0;width:800px;pointer-events:none;';
     document.documentElement.appendChild(hidden);
@@ -260,7 +257,6 @@
 
     const cut = raw.search(/\bAnswer\b|\bAttempt\b/);
     const body = cut > 0 ? raw.slice(0, cut) : raw;
-
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
 
     lines = lines.filter(l => {
@@ -274,13 +270,9 @@
     const merged = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i], next = lines[i + 1];
-      // merge a line ending in "=" with the following line
       if (/=\s*$/.test(l) && next && !/^=/.test(next) && next.length < 100) {
-        merged.push(l + next);
-        i++;
-      } else {
-        merged.push(l);
-      }
+        merged.push(l + next); i++;
+      } else merged.push(l);
     }
     return merged.join('\n');
   }
@@ -615,11 +607,9 @@
 
   function nSingle(text) {
     const nd = window.nerdamer;
-    // find the first line with both "=" and a letter, not starting with "="
     const eqLine = text.split('\n').find(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
     if (!eqLine) { console.log('[vite] nSingle: no equation line'); return null; }
     let eq = cleanLine(eqLine);
-    // (2)/(3) → (2/3) so nerdamer reads it as a single coefficient
     eq = eq.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, '($1/$2)');
     console.log('[vite] nSingle: solving', eq);
 
@@ -627,8 +617,7 @@
     if (vars.length !== 1) { console.log('[vite] nSingle: not single-var', vars); return null; }
     const v = vars[0];
     let sol; try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(x => x !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
     const work = ['Equation:', `  ${eq}`, '', 'Solve for ' + v + ':', ''];
     for (const s of vals) work.push(`  ${v} = ${s}`);
@@ -642,8 +631,7 @@
     let eq = cleanLine(m[1]).replace(/x\s*²/g, 'x^2');
     if (!eq.includes('=')) eq += '=0';
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString());
+    const vals = nerdamerVals(sol);
     return { answers: [{ v: 'x', val: vals.join(', ') }], work: ['Equation:', `  ${eq}`, '', 'Solutions:', ...vals.map(v => `  x = ${v}`)] };
   }
 
@@ -700,8 +688,8 @@
     const op = opMatch ? opMatch[0] : '=';
     const eq = ineq.replace(/<=|>=|<|>/, '=');
     let sol; try { sol = window.nerdamer.solve(eq, v); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const boundary = list.map(x => x.toString()).join(', ');
+    const vals = nerdamerVals(sol);
+    const boundary = vals.join(', ');
     return {
       answers: [{ v, val: `${op} ${boundary}` }],
       work: ['Inequality:', `  ${ineq}`, '', 'Solve the boundary equation:', `  ${eq}`, `  ${v} = ${boundary}`, '', 'Answer:', `  ${v} ${op} ${boundary}`]
@@ -716,8 +704,8 @@
     const rhs = m[2];
     let sol1, sol2;
     try {
-      sol1 = nd.solve(`${inner}=${rhs}`, 'x').toString();
-      sol2 = nd.solve(`${inner}=−${rhs}`, 'x').toString();
+      sol1 = nerdamerVals(nd.solve(`${inner}=${rhs}`, 'x')).join(', ');
+      sol2 = nerdamerVals(nd.solve(`${inner}=−${rhs}`, 'x')).join(', ');
     } catch (err) { return null; }
     return {
       answers: [{ v: 'x', val: `${sol1},   ${sol2}` }],
@@ -731,8 +719,7 @@
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
@@ -747,8 +734,7 @@
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
@@ -762,8 +748,7 @@
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
@@ -779,8 +764,7 @@
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
     if (!/\/\s*\(?[^=]*x/.test(eq)) return null;
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
@@ -794,8 +778,7 @@
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
-    const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString()).filter(v => v !== '');
+    const vals = nerdamerVals(sol);
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
@@ -823,8 +806,8 @@
       if (!opMatch) continue;
       const eq = ineqs[i].replace(/<=|>=|<|>/, '=');
       let sol; try { sol = nd.solve(eq, varName); } catch(e) { continue; }
-      const list = Array.isArray(sol) ? sol : [sol];
-      work.push(`  (${i+1})   ${varName} ${opMatch[0]} ${list.map(x => x.toString()).join(', ')}`);
+      const vals = nerdamerVals(sol);
+      work.push(`  (${i+1})   ${varName} ${opMatch[0]} ${vals.join(', ')}`);
     }
     return { answers: [{ v: 'system', val: 'see work' }], work };
   }
@@ -865,7 +848,7 @@
     if (inv && fDef) {
       const fexpr = cleanLine(fDef[1]);
       let out;
-      try { out = nd.solve(`y=${fexpr}`, 'x').toString(); } catch(e) { return null; }
+      try { out = nerdamerVals(nd.solve(`y=${fexpr}`, 'x')).join(', '); } catch(e) { return null; }
       return {
         answers: [{ v: 'f⁻¹(x)', val: out }],
         work: ['f(x) = ' + fexpr, '', 'Set y = f(x), solve for x:', `  y = ${fexpr}`, `  x = ${out}`, '', `f⁻¹(x) = ${out}`]
@@ -1066,7 +1049,7 @@
   }
 
   // ============================================================
-  // WORD PROBLEM SOLVER (Groq) — last resort only
+  // WORD PROBLEM SOLVER (Groq)
   // ============================================================
   const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
 
@@ -1082,10 +1065,10 @@ Return ONLY valid JSON, no prose, matching this exact shape:
 }
 
 Rules:
-- Equations use standard math notation (x, y, =, +, -, *, /, ^).
-- Solution values are exact — use fractions like "3/2" instead of "1.5" when applicable.
+- Equations use standard math notation.
+- Solution values are exact — use fractions like "3/2" instead of "1.5".
 - Work steps read like a student writing in a notebook.
-- If unsolvable or not a math problem, return {"error": "reason"}.`;
+- If unsolvable or not math, return {"error": "reason"}.`;
 
   function wrapText(s, width) {
     const words = s.split(/\s+/);
@@ -1283,7 +1266,6 @@ Rules:
   async function selfUpdate() {
     if (!CONFIG.SELF_UPDATE_URL) { showToast('no SELF_UPDATE_URL set'); return; }
 
-    // 1. fetch fresh code FIRST — never tear down unless we have a replacement
     showToast('updating…');
     let code;
     try {
@@ -1298,16 +1280,13 @@ Rules:
       return;
     }
 
-    // 2. full teardown of the current instance
     try { runCleanup(); } catch (e) { console.warn(e); }
     document.querySelectorAll('#__dm_btn, #__dm_modal, #__dm_menu, #__dm_toast').forEach(n => n.remove());
     [...document.querySelectorAll('[id^="__dm_"]')].forEach(n => n.remove());
     window.__dm3 = 0;
 
-    // 3. let the browser settle
     await new Promise(res => setTimeout(res, 60));
 
-    // 4. inject fresh version
     try {
       (0, eval)(code);
       console.log('%c[vite] updated to fresh build', 'color:#8a8a8a');
@@ -1381,4 +1360,3 @@ Rules:
 
   console.log('%c[vite] connected', 'color:#8a8a8a');
 })();
-                                                                  
