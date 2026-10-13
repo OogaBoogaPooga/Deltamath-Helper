@@ -475,7 +475,7 @@
   }
 
   // ============================================================
-  // CORE SOLVERS (systems + basics)
+  // CORE SOLVERS
   // ============================================================
   function nSystem(text) {
     const lines = text.split('\n');
@@ -605,11 +605,10 @@
   }
 
   // ============================================================
-  // NEW: LOGARITHMIC EQUATIONS
+  // LOG / EXP / RADICAL / RATIONAL / TRIG
   // ============================================================
   function solveLog(text) {
     const nd = window.nerdamer;
-    // find an equation containing log or ln
     const m = text.match(/[^\n]*(?:\blog\b|\bln\b)[^\n]*=[^\n]*/i);
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
@@ -617,21 +616,14 @@
     const list = Array.isArray(sol) ? sol : [sol];
     const vals = list.map(x => x.toString()).filter(v => v !== '');
     if (!vals.length) return null;
-    const work = [
-      'Logarithmic equation:',
-      `  ${eq}`, '',
-      'Rewrite in exponential form and solve:', '',
-      ...vals.map(v => `  x = ${v}`)
-    ];
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+    return {
+      answers: [{ v: 'x', val: vals.join(', ') }],
+      work: ['Logarithmic equation:', `  ${eq}`, '', 'Rewrite in exponential form and solve:', '', ...vals.map(v => `  x = ${v}`)]
+    };
   }
 
-  // ============================================================
-  // NEW: EXPONENTIAL EQUATIONS
-  // ============================================================
   function solveExp(text) {
     const nd = window.nerdamer;
-    // find equation with variable in exponent: 2^x = 8, e^x = 5, 3^(x+1) = 27
     const m = text.match(/[^\n]*\d+\s*\^\s*\(?\s*x[^\n]*=[^\n]*/i) ||
               text.match(/[^\n]*e\s*\^\s*\(?\s*x[^\n]*=[^\n]*/i);
     if (!m) return null;
@@ -640,18 +632,12 @@
     const list = Array.isArray(sol) ? sol : [sol];
     const vals = list.map(x => x.toString()).filter(v => v !== '');
     if (!vals.length) return null;
-    const work = [
-      'Exponential equation:',
-      `  ${eq}`, '',
-      'Take log of both sides and solve:', '',
-      ...vals.map(v => `  x = ${v}`)
-    ];
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+    return {
+      answers: [{ v: 'x', val: vals.join(', ') }],
+      work: ['Exponential equation:', `  ${eq}`, '', 'Take log of both sides and solve:', '', ...vals.map(v => `  x = ${v}`)]
+    };
   }
 
-  // ============================================================
-  // NEW: RADICAL EQUATIONS
-  // ============================================================
   function solveRadical(text) {
     const nd = window.nerdamer;
     const m = text.match(/[^\n]*sqrt\s*\([^\n]*=[^\n]*/i);
@@ -661,47 +647,29 @@
     const list = Array.isArray(sol) ? sol : [sol];
     const vals = list.map(x => x.toString()).filter(v => v !== '');
     if (!vals.length) return null;
-    const work = [
-      'Radical equation:',
-      `  ${eq}`, '',
-      'Isolate the radical, square both sides, solve:', '',
-      ...vals.map(v => `  x = ${v}`),
-      '',
-      '(check for extraneous solutions in the original equation)'
-    ];
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+    return {
+      answers: [{ v: 'x', val: vals.join(', ') }],
+      work: ['Radical equation:', `  ${eq}`, '', 'Isolate the radical, square both sides, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check for extraneous solutions in the original equation)']
+    };
   }
 
-  // ============================================================
-  // NEW: RATIONAL EQUATIONS
-  // ============================================================
   function solveRational(text) {
     const nd = window.nerdamer;
-    // find equation with x in denominator: 1/(x+2) = 3
     const m = text.match(/[^\n]*\/\s*\([^)]*x[^\n]*=[^\n]*/i) ||
               text.match(/[^\n]*\/\s*[a-z0-9][^\n]*=[^\n]*/i);
     if (!m) return null;
     const eq = cleanLine(m[0]).replace(/\s+/g, '');
-    // must actually have x in denominator — bail if not
     if (!/\/\s*\(?[^=]*x/.test(eq)) return null;
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
     const list = Array.isArray(sol) ? sol : [sol];
     const vals = list.map(x => x.toString()).filter(v => v !== '');
     if (!vals.length) return null;
-    const work = [
-      'Rational equation:',
-      `  ${eq}`, '',
-      'Multiply both sides by the LCD, solve:', '',
-      ...vals.map(v => `  x = ${v}`),
-      '',
-      '(check excluded values from the original denominators)'
-    ];
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+    return {
+      answers: [{ v: 'x', val: vals.join(', ') }],
+      work: ['Rational equation:', `  ${eq}`, '', 'Multiply both sides by the LCD, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check excluded values from the original denominators)']
+    };
   }
 
-  // ============================================================
-  // NEW: TRIG EQUATIONS
-  // ============================================================
   function solveTrig(text) {
     const nd = window.nerdamer;
     const m = text.match(/[^\n]*(?:\bsin\b|\bcos\b|\btan\b)[^\n]*=[^\n]*/i);
@@ -711,19 +679,14 @@
     const list = Array.isArray(sol) ? sol : [sol];
     const vals = list.map(x => x.toString()).filter(v => v !== '');
     if (!vals.length) return null;
-    const work = [
-      'Trig equation:',
-      `  ${eq}`, '',
-      'General solution:',
-      ...vals.map(v => `  x = ${v}`),
-      '',
-      '(n is any integer — period depends on the function)'
-    ];
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work };
+    return {
+      answers: [{ v: 'x', val: vals.join(', ') }],
+      work: ['Trig equation:', `  ${eq}`, '', 'General solution:', ...vals.map(v => `  x = ${v}`), '', '(n is any integer — period depends on the function)']
+    };
   }
 
   // ============================================================
-  // NEW: SYSTEMS OF INEQUALITIES
+  // SYSTEMS OF INEQUALITIES
   // ============================================================
   function solveSystemIneq(text) {
     const nd = window.nerdamer;
@@ -734,7 +697,6 @@
       if (m) ineqs.push(cleanLine(l).replace(/≤/g, '<=').replace(/≥/g, '>='));
     }
     if (ineqs.length < 2) return null;
-    // just show them and provide boundaries — full graph solve isn't feasible in text
     const work = ['System of inequalities:'];
     ineqs.forEach((ineq, i) => work.push(`  (${i+1})   ${ineq}`));
     work.push('');
@@ -758,11 +720,10 @@
   }
 
   // ============================================================
-  // NEW: POLYNOMIAL OPERATIONS
+  // POLYNOMIAL OPERATIONS
   // ============================================================
   function solvePolyOps(text) {
     const nd = window.nerdamer;
-    // "(x^2 + 3x) + (2x^2 - 5)" or "add: ..." or "multiply: ..."
     const m = text.match(/(?:add|subtract|multiply|divide|expand|simplify|rewrite in standard form)[:\s]+([^\n]+)/i) ||
               text.match(/(\([^\)]*[a-z][^\)]*\)\s*[\+\-\*\/×]\s*\([^\)]*[a-z][^\)]*\))/);
     if (!m) return null;
@@ -776,17 +737,16 @@
   }
 
   // ============================================================
-  // NEW: FUNCTION COMPOSITION / EVALUATION
+  // FUNCTION COMPOSITION / INVERSE / EVALUATION
   // ============================================================
   function solveComposition(text) {
     const nd = window.nerdamer;
-    // patterns: "f(x) = 2x + 3, g(x) = x - 1, find f(g(x))"
     const fDef = text.match(/f\s*\(\s*x\s*\)\s*=\s*([^,\n]+)/i);
     const gDef = text.match(/g\s*\(\s*x\s*\)\s*=\s*([^,\n]+)/i);
     const comp = text.match(/f\s*\(\s*g\s*\(\s*x\s*\)\s*\)/i);
     const inv = text.match(/f\s*(?:-1|⁻¹|\^\{-1\})\s*\(\s*x\s*\)/i);
     const evalAt = text.match(/f\s*\(\s*(-?\d+)\s*\)/i);
-    
+
     if (comp && fDef && gDef) {
       const fexpr = cleanLine(fDef[1]);
       const gexpr = cleanLine(gDef[1]);
@@ -794,14 +754,10 @@
       try { out = nd(fexpr).sub('x', `(${gexpr})`).expand().toString(); } catch(e) { return null; }
       return {
         answers: [{ v: 'f(g(x))', val: out }],
-        work: [
-          'f(x) = ' + fexpr, 'g(x) = ' + gexpr, '',
-          'f(g(x)) = ' + fexpr.replace(/x/g, `(${gexpr})`),
-          '        = ' + out
-        ]
+        work: ['f(x) = ' + fexpr, 'g(x) = ' + gexpr, '', 'f(g(x)) = ' + fexpr.replace(/x/g, `(${gexpr})`), '        = ' + out]
       };
     }
-    
+
     if (inv && fDef) {
       const fexpr = cleanLine(fDef[1]);
       let out;
@@ -811,7 +767,7 @@
         work: ['f(x) = ' + fexpr, '', 'Set y = f(x), solve for x:', `  y = ${fexpr}`, `  x = ${out}`, '', `f⁻¹(x) = ${out.replace(/x/g, 'x')}`]
       };
     }
-    
+
     if (evalAt && fDef) {
       const fexpr = cleanLine(fDef[1]);
       const xVal = evalAt[1];
@@ -822,19 +778,19 @@
         work: ['f(x) = ' + fexpr, '', `Substitute x = ${xVal}:`, `  f(${xVal}) = ${fexpr.replace(/x/g, `(${xVal})`)}`, `           = ${out}`]
       };
     }
-    
+
     return null;
   }
 
   // ============================================================
-  // NEW: STATISTICS (mean / median / mode / range / stdev)
+  // STATISTICS
   // ============================================================
   function solveStats(text) {
     const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
     if (!nums) return null;
     const arr = nums[0].split(',').map(s => parseFloat(s.trim()));
     if (arr.length < 2) return null;
-    
+
     const sorted = [...arr].sort((a,b) => a-b);
     const n = arr.length;
     const sum = arr.reduce((a,b) => a+b, 0);
@@ -847,9 +803,8 @@
     const range = sorted[n-1] - sorted[0];
     const variance = n > 1 ? arr.reduce((a,b) => a + (b-mean)**2, 0) / (n-1) : 0;
     const stdev = Math.sqrt(variance);
-    
     const modeStr = modes.length === arr.length && maxF === 1 ? 'none' : modes.join(', ');
-    
+
     const work = [
       'Data:', `  ${arr.join(', ')}`, '',
       'Sorted:', `  ${sorted.join(', ')}`, '',
@@ -872,7 +827,7 @@
   }
 
   // ============================================================
-  // NEW: QUADRATIC FORMS (vertex / axis / discriminant)
+  // QUADRATIC FORMS
   // ============================================================
   function solveQuadForm(text) {
     const m = text.match(/([+-]?[\d.]*)\s*x\s*[\^²]\s*([+-]\s*[\d.]*)\s*x\s*([+-]\s*[\d.]+)?/);
@@ -884,13 +839,13 @@
     const b = bStr === '' || bStr === '+' ? 1 : bStr === '-' ? -1 : parseFloat(bStr);
     const c = cStr === '' ? 0 : parseFloat(cStr);
     if (!a) return null;
-    
+
     const vertexX = -b / (2*a);
     const vertexY = a*vertexX*vertexX + b*vertexX + c;
     const disc = b*b - 4*a*c;
     const axis = vertexX;
     const yInt = c;
-    
+
     const work = [
       'Quadratic:',
       `  y = ${fmtQuadratic(a, b, c)}`, '',
@@ -914,7 +869,7 @@
       work
     };
   }
-  
+
   function fmtQuadratic(a, b, c) {
     let s = '';
     if (a === 1) s += 'x²';
@@ -928,14 +883,13 @@
   }
 
   // ============================================================
-  // NEW: SLOPE-INTERCEPT / LINE EQUATIONS
+  // LINE EQUATIONS
   // ============================================================
   function solveLine(text) {
-    // "through (2,3) with slope 4" or "through (1,2) and (3,6)"
     const slopeM = text.match(/slope\s*(?:of|=|is)?\s*(-?\d+\.?\d*(?:\/\d+)?)/i);
     const pts = text.match(/\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/g);
     if (!pts || pts.length < 1) return null;
-    
+
     let m, b;
     if (slopeM && pts.length >= 1) {
       m = parseFloat(slopeM[1]);
@@ -949,12 +903,12 @@
     } else {
       return null;
     }
-    
+
     const mStr = frac(m);
     const bStr = frac(b);
     const bSign = b >= 0 ? '+ ' : '− ';
     const eq = `y = ${mStr === '1' ? '' : mStr === '−1' ? '−' : mStr}x ${bSign}${frac(Math.abs(b))}`;
-    
+
     const work = [
       'Line equation:', '',
       `  slope m = ${mStr}`,
@@ -966,18 +920,18 @@
   }
 
   // ============================================================
-  // NEW: SEQUENCES (arithmetic / geometric)
+  // SEQUENCES
   // ============================================================
   function solveSequence(text) {
     const nums = text.match(/-?\d+\.?\d*(?:\s*,\s*-?\d+\.?\d*){2,}/);
     if (!nums) return null;
     const arr = nums[0].split(',').map(s => parseFloat(s.trim()));
     if (arr.length < 3) return null;
-    
+
     const d1 = arr[1] - arr[0];
     const d2 = arr[2] - arr[1];
     const isArith = Math.abs(d1 - d2) < 1e-10;
-    
+
     if (isArith) {
       const d = d1;
       const next = arr[arr.length - 1] + d;
@@ -989,12 +943,9 @@
         `Last given term (n=${arr.length}):`, `  a${arr.length} = ${frac(an)}`,
         `Next term:`, `  a${arr.length+1} = ${frac(an)} + ${frac(d)} = ${frac(next)}`
       ];
-      return {
-        answers: [{ v: 'd', val: frac(d) }, { v: 'next', val: frac(next) }],
-        work
-      };
+      return { answers: [{ v: 'd', val: frac(d) }, { v: 'next', val: frac(next) }], work };
     }
-    
+
     if (arr[0] !== 0) {
       const r1 = arr[1] / arr[0];
       const r2 = arr[2] / arr[1];
@@ -1006,22 +957,18 @@
           `  (check: ${arr[2]} / ${arr[1]} = ${frac(r2)})`, '',
           'Next term:', `  ${frac(arr[arr.length-1])} × ${frac(r1)} = ${frac(next)}`
         ];
-        return {
-          answers: [{ v: 'r', val: frac(r1) }, { v: 'next', val: frac(next) }],
-          work
-        };
+        return { answers: [{ v: 'r', val: frac(r1) }, { v: 'next', val: frac(next) }], work };
       }
     }
     return null;
   }
 
   // ============================================================
-  // NEW: GEOMETRY BASIC (circle / rectangle / triangle / cylinder)
+  // GEOMETRY BASICS
   // ============================================================
   function solveGeometry(text) {
     const t = text.toLowerCase();
-    
-    // Circle: radius r, area or circumference
+
     const rMatch = t.match(/radius\s*(?:of|=|is)?\s*(-?\d+\.?\d*)/i) || t.match(/r\s*=\s*(-?\d+\.?\d*)/);
     if (rMatch && /circle/i.test(t)) {
       const r = parseFloat(rMatch[1]);
@@ -1036,6 +983,38 @@
         ]
       };
     }
+
+    const lM = t.match(/length\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    const wM = t.match(/width\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    if (lM && wM) {
+      const l = parseFloat(lM[1]);
+      const w = parseFloat(wM[1]);
+      return {
+        answers: [{ v: 'area', val: frac(l*w) }, { v: 'perimeter', val: frac(2*(l+w)) }],
+        work: [
+          `Rectangle, l = ${l}, w = ${w}`, '',
+          'Area:', `  A = l × w = ${l} × ${w} = ${frac(l*w)}`,
+          'Perimeter:', `  P = 2l + 2w = 2(${l}) + 2(${w}) = ${frac(2*(l+w))}`
+        ]
+      };
+    }
+
+    const bM = t.match(/base\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    const hM = t.match(/height\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
+    if (bM && hM) {
+      const b = parseFloat(bM[1]);
+      const h = parseFloat(hM[1]);
+      return {
+        answers: [{ v: 'area', val: frac(b*h/2) }],
+        work: [
+          `Triangle, b = ${b}, h = ${h}`, '',
+          'Area:', `  A = ½bh = ½(${b})(${h}) = ${frac(b*h/2)}`
+        ]
+      };
+    }
+
+    return null;
+  }
 
   // ============================================================
   // WORD PROBLEM SOLVER (Groq)
@@ -1067,12 +1046,28 @@ Rules:
 - Work steps read like a student writing in a notebook. Plain text, one step per line.
 - If the problem is unsolvable or not a math problem, return {"error": "reason"}.`;
 
+  function wrapText(s, width) {
+    const words = s.split(/\s+/);
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).trim().length > width) { lines.push(cur.trim()); cur = w; }
+      else cur += ' ' + w;
+    }
+    if (cur.trim()) lines.push(cur.trim());
+    return lines;
+  }
+
   async function askGroq(userText) {
+    let key = getGroqKey();
+    if (!key) key = promptForKey();
+    if (!key) throw new Error('no key');
+
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + CONFIG.GROQ_KEY,
+        'Authorization': 'Bearer ' + key,
       },
       body: JSON.stringify({
         model: CONFIG.GROQ_MODEL,
@@ -1086,6 +1081,7 @@ Rules:
     });
     if (!r.ok) {
       const err = await r.text();
+      if (r.status === 401) { clearGroqKey(); showToast('bad key — cleared, try again'); }
       throw new Error(`Groq ${r.status}: ${err.slice(0, 120)}`);
     }
     const data = await r.json();
@@ -1093,9 +1089,9 @@ Rules:
   }
 
   async function solveWordProblem(text) {
-    if (!CONFIG.GROQ_KEY || CONFIG.GROQ_KEY.indexOf('gsk_') !== 0) {
-      showToast('no Groq key set');
-      return null;
+    if (!getGroqKey()) {
+      const k = promptForKey();
+      if (!k) { showToast('cancelled — key required'); return null; }
     }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
     if (clean.length < 20) { showToast('problem too short'); return null; }
@@ -1119,8 +1115,7 @@ Rules:
     const work = [];
     work.push('Word problem:');
     work.push('');
-    const wrapped = wrapText(clean, 68);
-    wrapped.forEach(l => work.push('  ' + l));
+    wrapText(clean, 68).forEach(l => work.push('  ' + l));
     work.push('');
     work.push('Assign variables:');
     data.variables.forEach(v => work.push(`  ${v} = ${data.meanings?.[v] || v}`));
@@ -1134,122 +1129,43 @@ Rules:
     return { answers, work };
   }
 
-  function wrapText(s, width) {
-    const words = s.split(/\s+/);
-    const lines = [];
-    let cur = '';
-    for (const w of words) {
-      if ((cur + ' ' + w).trim().length > width) { lines.push(cur.trim()); cur = w; }
-      else cur += ' ' + w;
-    }
-    if (cur.trim()) lines.push(cur.trim());
-    return lines;
-  }
-    // Rectangle: length and width
-    const lM = t.match(/length\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
-    const wM = t.match(/width\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
-    if (lM && wM) {
-      const l = parseFloat(lM[1]);
-      const w = parseFloat(wM[1]);
-      return {
-        answers: [{ v: 'area', val: frac(l*w) }, { v: 'perimeter', val: frac(2*(l+w)) }],
-        work: [
-          `Rectangle, l = ${l}, w = ${w}`, '',
-          'Area:', `  A = l × w = ${l} × ${w} = ${frac(l*w)}`,
-          'Perimeter:', `  P = 2l + 2w = 2(${l}) + 2(${w}) = ${frac(2*(l+w))}`
-        ]
-      };
-    }
-    
-    // Triangle: base and height
-    const bM = t.match(/base\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
-    const hM = t.match(/height\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
-    if (bM && hM) {
-      const b = parseFloat(bM[1]);
-      const h = parseFloat(hM[1]);
-      return {
-        answers: [{ v: 'area', val: frac(b*h/2) }],
-        work: [
-          `Triangle, b = ${b}, h = ${h}`, '',
-          'Area:', `  A = ½bh = ½(${b})(${h}) = ${frac(b*h/2)}`
-        ]
-      };
-    }
-    
-    return null;
-  }
-
   // ============================================================
   // DISPATCH
   // ============================================================
   function detect(t) {
-    // Systems first (most specific)
     if (/\bsolve the (following )?system\b/i.test(t)) return 'system';
     if (/\bsolve\b/i.test(t) && /[<>≤≥]/.test(t) && /[a-z]\s*[<>≤≥]/.test(t)) {
-      // could be a system of inequalities — check for 2+ inequalities
       const ineqCount = (t.match(/[<>≤≥]/g) || []).length;
       if (ineqCount >= 2) return 'systemIneq';
       return 'inequality';
     }
-    
-    // Absolute value
     if (/\|.*\|/.test(t) && /\bsolve\b/i.test(t)) return 'abs';
-    
-    // Trig
     if (/\b(sin|cos|tan)\s*\(?/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'trig';
-    
-    // Log
     if (/\b(log|ln)\b/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'log';
-    
-    // Exponential (2^x, e^x)
     if (/[\de]\s*\^\s*\(?\s*[a-z]/i.test(t) && /\bsolve\b/i.test(t)) return 'exp';
-    
-    // Radical
     if (/sqrt\s*\(/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'radical';
-    
-    // Rational
     if (/\/\s*\([^)]*x/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'rational';
-    
-    // Quadratic forms (vertex, axis, etc.)
     if (/\b(vertex|axis of symmetry|discriminant)\b/i.test(t)) return 'quadForm';
-    
-    // Regular quadratic
     if (/x\s*[\^²]/.test(t)) return 'quadratic';
-    
-    // Composition / inverse / evaluation
     if (/f\s*\(\s*g\s*\(\s*x\s*\)\s*\)/i.test(t)) return 'composition';
     if (/f\s*(?:-1|⁻¹|\^\{-1\})\s*\(/i.test(t)) return 'composition';
     if (/f\s*\(\s*x\s*\)\s*=/i.test(t)) return 'composition';
-    
-    // Statistics (list of numbers with "mean", "median", etc. keywords)
     if (/\b(mean|median|mode|range|standard deviation|stdev)\b/i.test(t)) return 'stats';
-    
-    // Sequences
     if (/\b(sequence|arithmetic|geometric|nth term|next term|common difference|common ratio)\b/i.test(t)) return 'sequence';
-    
-    // Line equations
     if (/\b(slope.intercept|point.slope|equation of the line|line through)\b/i.test(t)) return 'line';
     if (/\bslope\b/i.test(t) && /\(-?\d+\s*,\s*-?\d+\)/.test(t)) return 'slope';
-    
-    // Polynomial operations
     if (/\b(add|subtract|multiply|divide|expand)\b/i.test(t) && /\([^)]*[a-z][^)]*\)/.test(t)) return 'polyOps';
-    
-    // Single-variable
     if (/\bsolve\b.*\bfor\b/i.test(t) || /\bsolve\b/i.test(t)) {
       const lines = t.split('\n');
       const eqLines = lines.filter(l => /[a-z]/i.test(l) && /=/.test(l));
       const sv = eqLines.filter(l => (l.match(/[a-z]/gi) || []).length === 1);
       if (sv.length) return 'single';
     }
-    
     if (/\bsimplif|rewrite in simplest|combine like terms|expand|multiply\b/i.test(t)) return 'simplify';
     if (/\bfactor/i.test(t)) return 'factor';
     if (/\bdistance\b|\bmidpoint\b/i.test(t)) return 'distance';
-    
-    // Geometry fallback
     if (/\b(area|perimeter|circumference|volume)\b/i.test(t)) return 'geometry';
 
-    // Word problem fallback — text heavy, no parseable equation
     const wordCount = (t.match(/\b[a-z]+\b/gi) || []).length;
     const hasEquation = /[=<>≤≥]/.test(t) || /[a-z]\s*[\^²]/.test(t);
     if (!hasEquation && wordCount > 20) return 'word';
@@ -1315,6 +1231,8 @@ Rules:
     const items = [
       ['Copy problem screenshot', () => copyQuestionScreenshot()],
       ['Read text from image (OCR)', async () => { const t = await ocrImages(); showToast(t ? 'read: ' + t.slice(0, 60) : 'no image'); }],
+      ['Set Groq API key', () => promptForKey()],
+      ['Clear Groq API key', () => { clearGroqKey(); showToast('key cleared'); }],
       ['Update from GitHub', () => selfUpdate()],
     ];
     items.forEach(([label, fn]) => {
