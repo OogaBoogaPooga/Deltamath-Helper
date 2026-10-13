@@ -1,152 +1,115 @@
-# delta-math-helper
+# dm-helper
 
-Solve any DeltaMath problem and get the full work — no install, just paste one line into your browser.
+thing I made for DeltaMath. It reads the problem off the page, solves it, and shows the work.
+
+No install, no extension, no account. Just paste a line into the browser console.
 
 ---
 
 ## How to use it
 
-**Step 1.** Open your DeltaMath problem like normal.
-
-**Step 2.** Press `F12` to open DevTools. (On Chromebook: `Ctrl + Shift + I`.)
-
-**Step 3.** Click the **Console** tab at the top.
-
-**Step 4.** Paste this line, hit Enter:
+1. Open a DeltaMath problem like normal.
+2. Press `F12` (or `Cmd + Option + I` on a Mac) to open the console.
+3. Click the **Console** tab.
+4. Paste this in and hit Enter:
 
 ```js
 fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
 ```
 
-**Step 5.** A small circular button appears in the bottom-right corner.
+5. A little `?` button shows up in the bottom-right corner.
+6. Click it.
 
-**Step 6.** Click it. You get the answer and the full work.
-
-That's it.
-
----
-
-## What you'll see
-
-A popup with two parts:
-
-1. **The answer** — big and clear, like `x = 3, y = -2, z = 5`
-2. **A "Show work" button** — click it and you get every step, written the way you'd write it in a notebook. Copy it straight to your paper.
-
-The work is printed in stacked form — equations line up on the `=`, the `+` or `−` sign sits in front of the second row, a divider line separates it from the result. No matrices, no row-operation notation, no jargon. Every line is something you'd actually write.
-
-Press **Esc** or click outside the popup to close it.
+You get the answer and the work.
 
 ---
 
-## Right-click the button for extras
+## What happens when you click it
 
-- **Copy problem screenshot** — if the problem has a graph or picture, this copies it so you can paste it into ChatGPT or any AI to ask about it.
-- **Read text from image (OCR)** — if the equation is inside a picture, this reads it automatically.
-- **Update from GitHub** — pulls the newest version without re-pasting.
+A popup opens with two things:
+
+- **The answer** — big and readable
+- **Show work** — every step written out the way you'd write it on paper
+
+You can copy the whole thing straight into your notebook.
+
+---
+
+## Right-click the `?` button
+
+- **Copy problem screenshot** — copies the question area
+- **Read text from image** — reads text off pictures (OCR)
+- **View failed problems** — shows every problem it couldn't solve, with screenshots. If it fails on something, click "Copy all text" and send it to me so I can add it.
+- **Set / Clear Groq API key** — only needed for word problems (see below)
+- **Update from GitHub** — pulls the newest version without pasting again
 
 ---
 
 ## What it solves
 
-| Type | Status |
-|---|---|
-| Systems of equations (2×2 to 4×4) | ✅ Full stacked work |
-| Single-variable equations (`3x + 5 = 20`) | ✅ |
-| Quadratics (`x² + 5x + 6 = 0`) | ✅ |
-| Inequalities (`2x + 3 > 7`) | ✅ |
-| Absolute value (`\|x − 3\| = 7`) | ✅ |
-| Simplify / expand / combine like terms | ✅ |
-| Factor | ✅ |
-| Distance, midpoint, slope | ✅ |
-| Equations shown as images | ✅ via OCR |
-
-**Not supported:** graph problems, word problems, trig, logs, exponentials, geometry, statistics. For those, use **Copy problem screenshot** and ask an AI.
-
----
-
-## Example output
-
-For the system `−7x − 7y + z = 5`, `4x + 4y − z = −5`, `9x + 10y − z = −2`:
-
-```
-Given system:
-
-  (1)   −7x − 7y + z = 5
-  (2)   4x + 4y − z = −5
-  (3)   9x + 10y − z = −2
-
-Step 1: Eliminate x
-
-  Stack (1) and (2):
-    (1)   −7x − 7y + z = 5
-    (2)   4x + 4y − z = −5
-
-  Multiply to match x-coefficients:
-    4 × (1):   −28x − 28y + 4z = 20
-    7 × (2):    28x + 28y − 7z = −35
-
-  Add 4 × (1) and 7 × (2):
-      −28x − 28y + 4z = 20
-    +  28x + 28y − 7z = −35
-    ─────────────────────────
-      −3z = −15     (4)
-
-  ...
-
-Solution:   x = −3,   y = 3,   z = 5
-```
-
-Copy the whole block into your notebook. Every line is already in handwritten form.
+- Linear systems (2×2 up to 4×4), with elimination **or** substitution work
+- Single-variable equations, including ones with parentheses
+- Quadratics
+- Compound inequalities
+- Absolute value equations and inequalities
+- Regular inequalities
+- Simplifying, expanding, factoring
+- Slopes, distance, midpoint
+- Lines: point-slope, slope-intercept, standard form, parallel/perpendicular
+- Direct variation
+- Point translation
+- Intercepts
+- Function evaluation and composition
+- Properties of real numbers
+- Sequences
+- Basic stats (mean, median, mode, range, stdev)
+- Basic geometry
+- Word problems (needs a Groq key)
 
 ---
 
-## Tired of pasting the line every time?
+## Word problems
 
-Do this once:
+Word problems use an AI behind the scenes (Groq). You'll need a free API key from [console.groq.com](https://console.groq.com).
 
-1. In DevTools, click the **Sources** tab.
-2. On the left, click **Snippets**.
-3. Click **+ New snippet**.
-4. Paste the entire `dm.js` file in there.
-5. Press **Ctrl + Enter** (or `Cmd + Enter`) to run.
+The first time you hit a word problem, it'll ask for your key. Paste it in, and it's saved in your browser only. It never touches the repo, and it's stored with `localStorage` so it doesn't leave your machine.
 
-Now it's saved forever. Next time you open DeltaMath, click the snippet, hit `Ctrl + Enter`, done in a second.
+To remove it later: right-click the `?` button → Clear Groq API key.
 
 ---
 
-## What it does NOT do
+## If you use it a lot
 
-- Doesn't submit anything for you
-- Doesn't touch your account
-- Doesn't send your data anywhere
-- Doesn't change anything on DeltaMath
+Instead of pasting the line every time, save it as a snippet:
 
-It reads what's already on your screen and does the math. Like a really fast calculator that shows its work.
+1. DevTools → **Sources** tab → **Snippets** on the left
+2. **+ New snippet**
+3. Paste the whole `dm.js` file in there
+4. Hit `Ctrl + Enter` to run it
 
----
-
-## Something not working?
-
-If the button doesn't appear, or it says it can't solve the problem:
-
-1. Press `F12` to open the console
-2. Look for lines that start with `[vite]`
-3. Copy what it says and send it in
-
-That shows exactly what went wrong.
+Now it's saved forever. One keystroke each session.
 
 ---
 
-## Hosting it yourself
+## What it doesn't do
 
-1. Create a new public GitHub repo
-2. Add `dm.js` to the repo
-3. Replace `YOURUSER/YOURREPO` in the loader line at the top of this README with your real GitHub username and repo name
-4. Done — the paste-in line now works for anyone you share it with
+- Graph problems (needs a vision model)
+- Number line problems (visual)
+- Geometric proofs
+- Word problems without a Groq key
 
-The button styling, self-update URL, and everything else is already configured inside `dm.js`.
+For the visual ones, right-click the button → **Copy problem screenshot**, paste into ChatGPT or Claude.
 
 ---
 
-*Not affiliated with DeltaMath. Just a math tool.*
+## I found a bug / it doesn't work
+
+Right-click the `?` button → **View failed problems**. Click **Copy all text**. Send me what shows up.
+
+That gives me the exact problem text so I can add the solver.
+
+---
+
+## Not affiliated with DeltaMath
+
+Just a tool I built. DETAMATH DONT KILL ME PLS
