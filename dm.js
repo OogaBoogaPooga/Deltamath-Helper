@@ -254,11 +254,13 @@
       if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
       if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
       return true;
+      if (/^=\s*[A-Z]/.test(l)) return false;
     });
     const merged = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i], next = lines[i + 1];
-      if (/=\s*$/.test(l) && next && /^-?\d+\.?\d*\s*$/.test(next)) { merged.push(l + next); i++; }
+      // merge anything that ends in "=" with whatever comes next
+      if (/=\s*$/.test(l) && next && !/^=/.test(next)) { merged.push(l + next); i++; }
       else merged.push(l);
     }
     return merged.join('\n');
@@ -602,7 +604,9 @@
     const nd = window.nerdamer;
     const m = text.match(/([^\n]*[a-z][^\n]*=[^\n]*)/i);
     if (!m) return null;
-    const eq = cleanLine(m[1]);
+    let eq = cleanLine(m[1]);
+    // (2)/(3)z → (2/3)z so nerdamer reads the fraction as a single coefficient
+    eq = eq.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, '($1/$2)');
     const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
     if (vars.length !== 1) return null;
     const v = vars[0];
