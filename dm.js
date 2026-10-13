@@ -622,18 +622,14 @@
     const vals = nerdamerVals(sol);
     if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
     const answer = { v, val: vals.join(', ') };
-    const fallback = () => ({ answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] });
 
-    // split into LHS and RHS, extract coefficient+constant of each
+    // --- extract LHS/RHS structure ---
     const parts = eq.split('=');
-    if (parts.length !== 2) return fallback();
-    const lhs = parts[0].trim();
-    const rhs = parts[1].trim();
+    if (parts.length !== 2) return { answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] };
+    const lhsRaw = parts[0].trim();
+    const rhsRaw = parts[1].trim();
 
-    function toNum(o) {
-      try { return Number(o.text('decimals')); }
-      catch (e) { return Number(o.toString()); }
-    }
+    function toNum(o) { try { return Number(o.text('decimals')); } catch (e) { return Number(o.toString()); } }
     function analyze(expr) {
       try {
         const f0 = toNum(nd(expr).sub(v, 0).evaluate());
@@ -643,85 +639,116 @@
         return { coef: f1 - f0, constant: f0 };
       } catch (e) { return null; }
     }
+    function fmtLin(a, b) {
+      const out = [];
+      if (Math.abs(a) > 1e-10) {
+        if (Math.abs(a - 1) < 1e-10) out.push(v);
+        else if (Math.abs(a + 1) < 1e-10) out.push('−' + v);
+        else out.push(frac(a) + v);
+      }
+      if (Math.abs(b) > 1e-10) {
+        if (out.length === 0) out.push(frac(b));
+        else out.push((b < 0 ? '−' : '+') + ' ' + frac(Math.abs(b)));
+      }
+      if (out.length === 0) out.push('0');
+      return out.join(' ');
+    }
+    // try to display Nerdamer's expanded+combined form for the "distribute" step
+    function expanded(expr) {
+      try {
+        return nd(expr).expand().toString()
+          .replace(/(\d)\s*\*\s*([a-z])/g, '$1$2')
+          .replace(/\s*\*\s*/g, ' ')
+          .replace(/\s*\+\s*/g, ' + ')
+          .replace(/\s*-\s*/g, ' − ')
+          .replace(/−\s*−/g, '+')
+          .trim();
+      } catch (e) { return null; }
+    }
 
-    const L = analyze(lhs);
-    const R = analyze(rhs);
-    if (!L || !R) return fallback();
-
-    const term = c => {
-      if (Math.abs(c - 1) < 1e-10) return v;
-      if (Math.abs(c + 1) < 1e-10) return '−' + v;
-      return frac(c) + v;
-    };
-    const C = x => frac(x);
+    const L = analyze(lhsRaw);
+    const R = analyze(rhsRaw);
+    if (!L || !R) return { answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] };
 
     const work = [];
     work.push('Equation:');
     work.push('  ' + eq);
     work.push('');
 
-    // Case A — variable only on the right
-    if (Math.abs(L.coef) < 1e-10 && Math.abs(R.coef) > 1e-10) {
-      const a = R.coef, b = R.constant, c = L.constant;
-      work.push('Rewrite with the variable on the left:');
-      work.push(`  ${term(a)} + ${C(b)} = ${C(c)}`);
+    const hasParens = /\(/.test(eq);
+    let workingL = L, workingR = R;
+
+    if (hasParens) {
+      const lhsExp = expanded(lhsRaw);
+      const rhsExp = expanded(rhsRaw);
+      work.push('Distribute and combine like terms:');
+      if (lhsExp && rhsExp) {
+        work.push(`  ${lhsExp} = ${rhsExp}`);
+      } else {
+        work.push(`  ${fmtLin(L.coef, L.constant)} = ${fmtLin(R.coef, R.constant)}`);
+      }
       work.push('');
+      workingL = L;
+      workingR = R;
+    }
+
+    // --- solve cases ---
+    // Case A: variable only on RHS → rewrite, then subtract constant, then divide
+    if (Math.abs(workingL.coef) < 1e-10 && Math.abs(workingR.coef) > 1e-10) {
+      const a = workingR.coef, b = workingR.constant, c = workingL.constant;
+      if (hasParens) {
+        work.push('Rewrite with the variable on the left:');
+        work.push(`  ${fmtLin(a, b)} = ${frac(c)}`);
+        work.push('');
+      }
       if (Math.abs(b) > 1e-10) {
-        work.push(`Subtract ${C(b)} from both sides:`);
-        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
-        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push(`Subtract ${frac(b)} from both sides:`);
+        work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`);
+        work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`);
         work.push('');
       }
       if (Math.abs(a - 1) > 1e-10) {
-        if (Math.abs(a) < 1) {
-          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
-        } else {
-          work.push(`Divide both sides by ${C(a)}:`);
-        }
-        work.push(`  ${v} = ${C((c - b) / a)}`);
+        if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)} (the reciprocal of ${frac(a)}):`);
+        else work.push(`Divide both sides by ${frac(a)}:`);
+        work.push(`  ${v} = ${frac((c - b) / a)}`);
         work.push('');
       }
     }
-    // Case B — variable only on the left
-    else if (Math.abs(R.coef) < 1e-10 && Math.abs(L.coef) > 1e-10) {
-      const a = L.coef, b = L.constant, c = R.constant;
+    // Case B: variable only on LHS
+    else if (Math.abs(workingR.coef) < 1e-10 && Math.abs(workingL.coef) > 1e-10) {
+      const a = workingL.coef, b = workingL.constant, c = workingR.constant;
       if (Math.abs(b) > 1e-10) {
-        work.push(`Subtract ${C(b)} from both sides:`);
-        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
-        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push(`Subtract ${frac(b)} from both sides:`);
+        work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`);
+        work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`);
         work.push('');
       }
       if (Math.abs(a - 1) > 1e-10) {
-        if (Math.abs(a) < 1) {
-          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
-        } else {
-          work.push(`Divide both sides by ${C(a)}:`);
-        }
-        work.push(`  ${v} = ${C((c - b) / a)}`);
+        if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)} (the reciprocal of ${frac(a)}):`);
+        else work.push(`Divide both sides by ${frac(a)}:`);
+        work.push(`  ${v} = ${frac((c - b) / a)}`);
         work.push('');
       }
     }
-    // Case C — variables on both sides
-    else if (Math.abs(L.coef) > 1e-10 && Math.abs(R.coef) > 1e-10) {
-      const a1 = L.coef, b1 = L.constant, a2 = R.coef, b2 = R.constant;
+    // Case C: variable on both sides
+    else if (Math.abs(workingL.coef) > 1e-10 && Math.abs(workingR.coef) > 1e-10) {
+      const a1 = workingL.coef, b1 = workingL.constant;
+      const a2 = workingR.coef, b2 = workingR.constant;
       const a = a1 - a2, b = b1, c = b2;
-      work.push(`Subtract ${term(a2)} from both sides to get the variable on one side:`);
-      work.push(`  ${term(a1)} + ${C(b1)} − ${term(a2)} = ${C(b2)} − ${term(a2)}`);
-      work.push(`  ${term(a)} + ${C(b)} = ${C(c)}`);
+      work.push(`Subtract ${frac(a2)}${v} from both sides to get the variable on one side:`);
+      work.push(`  ${fmtLin(a1, b1)} − ${frac(a2)}${v} = ${fmtLin(a2, b2)} − ${frac(a2)}${v}`);
+      work.push(`  ${fmtLin(a, b)} = ${frac(c)}`);
       work.push('');
       if (Math.abs(b) > 1e-10) {
-        work.push(`Subtract ${C(b)} from both sides:`);
-        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
-        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push(`Subtract ${frac(b)} from both sides:`);
+        work.push(`  ${fmtLin(a, b)} − ${frac(b)} = ${frac(c)} − ${frac(b)}`);
+        work.push(`  ${fmtLin(a, 0)} = ${frac(c - b)}`);
         work.push('');
       }
       if (Math.abs(a - 1) > 1e-10) {
-        if (Math.abs(a) < 1) {
-          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
-        } else {
-          work.push(`Divide both sides by ${C(a)}:`);
-        }
-        work.push(`  ${v} = ${C((c - b) / a)}`);
+        if (Math.abs(a) < 1) work.push(`Multiply both sides by ${frac(1/a)} (the reciprocal of ${frac(a)}):`);
+        else work.push(`Divide both sides by ${frac(a)}:`);
+        work.push(`  ${v} = ${frac((c - b) / a)}`);
         work.push('');
       }
     }
@@ -1275,7 +1302,10 @@ Rules:
     if (/\bsolve\b.*\bfor\b/i.test(t) || /\bsolve\b/i.test(t)) {
       const lines = t.split('\n');
       const eqLines = lines.filter(l => /[a-z]/i.test(l) && /=/.test(l));
-      const sv = eqLines.filter(l => (l.match(/[a-z]/gi) || []).length === 1);
+      const sv = eqLines.filter(l => {
+        const distinct = [...new Set((l.match(/[a-z]/gi) || []).map(c => c.toLowerCase()))];
+        return distinct.length === 1;
+      });
       if (sv.length) return 'single';
     }
     if (/\bsimplif|rewrite in simplest|combine like terms|expand|multiply\b/i.test(t)) return 'simplify';
