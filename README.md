@@ -15,7 +15,7 @@ Solve any DeltaMath problem and get the full work — no install, just paste one
 **Step 4.** Paste this line, hit Enter:
 
 ```js
-fetch('https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/dm.js').then(r=>r.text()).then(eval)
+fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
 ```
 
 **Step 5.** A small circular button appears in the bottom-right corner.
