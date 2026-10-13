@@ -1,5 +1,5 @@
 /* DeltaMath assistant — single-file console script
- * Load: fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
+ * Load: fetch('https://raw.githubusercontent.com/<you>/<repo>/main/dm.js').then(r=>r.text()).then(eval)
  */
 
 (function () {
@@ -10,7 +10,7 @@
   // CONFIG
   // ============================================================
   const CONFIG = {
-    SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
+    SELF_UPDATE_URL: '',
     OCR_LANG: 'eng',
   };
 
@@ -52,21 +52,32 @@
   // BUTTON
   // ============================================================
   const btn = document.createElement('div');
-  btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:36px;height:36px;
-    border-radius:50%;background:rgba(28,28,30,.85);display:flex;align-items:center;
-    justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;
-    box-shadow:0 2px 10px rgba(0,0,0,.35);backdrop-filter:blur(8px);
-    -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.08);
-    transition:background .15s;`;
-  btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="22" height="22" fill="#c8c8c8">
-    <path d="M32 12 L58 24 L32 36 L6 24 Z"/>
-    <path d="M18 30 L18 40 Q18 48 32 51 Q46 48 46 40 L46 30 L42 32 L42 40 Q42 44 32 46 Q22 44 22 40 L22 32 Z"/>
-    <line x1="6" y1="24" x2="6" y2="36" stroke="#c8c8c8" stroke-width="1.6"/>
-    <circle cx="6" cy="38" r="2.6"/>
-    <path d="M3 42 L9 42 Q11 51 6 53 Q1 51 3 42 Z"/>
-  </svg>`;
-  btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(40,40,42,.95)');
-  btn.addEventListener('mouseleave', () => btn.style.background = 'rgba(28,28,30,.85)');
+  btn.style.cssText = `
+    position:fixed;bottom:20px;right:20px;width:44px;height:44px;
+    border-radius:50%;
+    background:#1e3a5f;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;user-select:none;
+    z-index:2147483000;
+    box-shadow:0 2px 8px rgba(30,58,95,.28), 0 1px 3px rgba(0,0,0,.12);
+    transition:background .15s ease, box-shadow .15s ease, transform .15s ease;`;
+  btn.innerHTML = `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>`;
+  btn.addEventListener('mouseenter', () => {
+    btn.style.background = '#152c4a';
+    btn.style.boxShadow = '0 4px 12px rgba(30,58,95,.35), 0 2px 4px rgba(0,0,0,.15)';
+    btn.style.transform = 'translateY(-1px)';
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.background = '#1e3a5f';
+    btn.style.boxShadow = '0 2px 8px rgba(30,58,95,.28), 0 1px 3px rgba(0,0,0,.12)';
+    btn.style.transform = 'translateY(0)';
+  });
   document.documentElement.appendChild(btn);
   btn.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
@@ -76,7 +87,6 @@
     e.preventDefault(); e.stopPropagation();
     openMenu();
   }, true);
-
   // ============================================================
   // HELPERS
   // ============================================================
