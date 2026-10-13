@@ -9,9 +9,7 @@
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
     GROQ_MODEL: 'openai/gpt-oss-120b',
-    OWNER_WEBHOOK: '', // paste your discord webhook here if you want failures sent to you
-  };
-
+    OWNER_WEBHOOK: 'https://discord.com/api/webhooks/1559592439679819847/lWj3OKi3SAlSQtXuKelBepaMC7y-qM-CdxYDrivVIcwM4rcxrwml5xvz4Qzq8T-rBELU', // sent to my discord bot
   const KEY_STORAGE = '__dm_groq_key';
   function getGroqKey() { try { return localStorage.getItem(KEY_STORAGE) || ''; } catch { return ''; } }
   function setGroqKey(k) { try { localStorage.setItem(KEY_STORAGE, k); } catch {} }
