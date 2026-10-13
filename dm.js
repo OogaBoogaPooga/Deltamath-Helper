@@ -33,6 +33,17 @@
   }
 
   // ============================================================
+  // CLEANUP REGISTRY
+  // ============================================================
+  const CLEANUP = [];
+  function onCleanup(fn) { CLEANUP.push(fn); }
+  function runCleanup() {
+    while (CLEANUP.length) {
+      try { CLEANUP.pop()(); } catch (e) { console.warn(e); }
+    }
+  }
+
+  // ============================================================
   // ENGINE LOADERS
   // ============================================================
   const CDN = {
@@ -70,6 +81,7 @@
   // BUTTON
   // ============================================================
   const btn = document.createElement('div');
+  btn.id = '__dm_btn';
   btn.style.cssText = `
     position:fixed;bottom:20px;right:20px;width:44px;height:44px;
     border-radius:50%;
@@ -131,7 +143,7 @@
   }
 
   // ============================================================
-  // MATH DOM WALKER — handles MathQuill and KaTeX structures
+  // MATH DOM WALKER — handles MathQuill, KaTeX, MathML
   // ============================================================
   function walkMath(node) {
     if (!node) return '';
@@ -227,16 +239,16 @@
 
     // Replace every rendered math element with its reconstructed plain-text form
     clone.querySelectorAll('.katex, .mq-root-block, math, .MathJax, .MathJax_Preview').forEach(el => {
-      if (!el.parentNode) return; // already replaced by an ancestor pass
+      if (!el.parentNode) return;
       const txt = walkMath(el);
       if (txt && txt.trim()) {
         el.replaceWith(document.createTextNode(' ' + txt + ' '));
       }
     });
 
-    // Render offscreen to pick up innerText (respects block layout for the rest of the page)
+    // Off-screen render so innerText computes correctly
     const hidden = document.createElement('div');
-    hidden.style.cssText = 'position:absolute;left:-99999px;top:0;width:1px;height:1px;overflow:hidden;';
+    hidden.style.cssText = 'position:absolute;left:-99999px;top:0;width:800px;pointer-events:none;';
     document.documentElement.appendChild(hidden);
     hidden.appendChild(clone);
 
@@ -248,7 +260,9 @@
 
     const cut = raw.search(/\bAnswer\b|\bAttempt\b/);
     const body = cut > 0 ? raw.slice(0, cut) : raw;
+
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
+
     lines = lines.filter(l => {
       if (!l) return false;
       if (/^=/.test(l)) return false;
@@ -256,10 +270,11 @@
       if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
       return true;
     });
+
     const merged = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i], next = lines[i + 1];
-      // merge any line ending in "=" with the following line
+      // merge a line ending in "=" with the following line
       if (/=\s*$/.test(l) && next && !/^=/.test(next) && next.length < 100) {
         merged.push(l + next);
         i++;
@@ -320,8 +335,7 @@
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(bitmap, 0, 0);
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
       const sx = rect.left * (bitmap.width / window.innerWidth);
       const sy = rect.top * (bitmap.height / window.innerHeight);
       const sw = rect.width * (bitmap.width / window.innerWidth);
@@ -393,18 +407,16 @@
   }
 
   function stackLines(A_eq, B_eq, op, R_eq, label) {
-    const A = splitEq(A_eq);
-    const B = splitEq(B_eq);
-    const R = splitEq(R_eq);
+    const A = splitEq(A_eq), B = splitEq(B_eq), R = splitEq(R_eq);
     const maxLHS = Math.max(A.lhs.length, B.lhs.length, R.lhs.length);
     const padR = (s, n) => s + ' '.repeat(Math.max(0, n - s.length));
     const dashLen = maxLHS + 14;
-    const lines = [];
-    lines.push('      ' + padR(A.lhs, maxLHS) + ' = ' + A.rhs);
-    lines.push('    ' + op + ' ' + padR(B.lhs, maxLHS) + ' = ' + B.rhs);
-    lines.push('    ' + '─'.repeat(dashLen));
-    lines.push('      ' + padR(R.lhs, maxLHS) + ' = ' + R.rhs + '     ' + label);
-    return lines;
+    return [
+      '      ' + padR(A.lhs, maxLHS) + ' = ' + A.rhs,
+      '    ' + op + ' ' + padR(B.lhs, maxLHS) + ' = ' + B.rhs,
+      '    ' + '─'.repeat(dashLen),
+      '      ' + padR(R.lhs, maxLHS) + ' = ' + R.rhs + '     ' + label,
+    ];
   }
 
   // ============================================================
@@ -466,18 +478,15 @@
 
         counter++;
         const newLabel = `(${counter})`;
-
         const aDesc = mA === 1 ? `(${A.label})` : `${mA} × (${A.label})`;
         const bDesc = mB === 1 ? `(${B.label})` : `${mB} × (${B.label})`;
 
         if (sameSign) {
           out.push(`  Subtract ${aDesc} from ${bDesc}:`);
-          const stack = stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel);
-          stack.forEach(l => out.push(l));
+          stackLines(fmtEq(B2, vars), fmtEq(A2, vars), '−', fmtEq(result, vars), newLabel).forEach(l => out.push(l));
         } else {
           out.push(`  Add ${aDesc} and ${bDesc}:`);
-          const stack = stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel);
-          stack.forEach(l => out.push(l));
+          stackLines(fmtEq(A2, vars), fmtEq(B2, vars), '+', fmtEq(result, vars), newLabel).forEach(l => out.push(l));
         }
         out.push('');
 
@@ -606,17 +615,21 @@
 
   function nSingle(text) {
     const nd = window.nerdamer;
-    const m = text.match(/([^\n]*[a-z][^\n]*=[^\n]*)/i);
-    if (!m) return null;
-    let eq = cleanLine(m[1]);
-    // (2)/(3)z → (2/3)z so nerdamer reads the fraction as a single coefficient
+    // find the first line with both "=" and a letter, not starting with "="
+    const eqLine = text.split('\n').find(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
+    if (!eqLine) { console.log('[vite] nSingle: no equation line'); return null; }
+    let eq = cleanLine(eqLine);
+    // (2)/(3) → (2/3) so nerdamer reads it as a single coefficient
     eq = eq.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, '($1/$2)');
+    console.log('[vite] nSingle: solving', eq);
+
     const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
-    if (vars.length !== 1) return null;
+    if (vars.length !== 1) { console.log('[vite] nSingle: not single-var', vars); return null; }
     const v = vars[0];
-    let sol; try { sol = nd.solve(eq, v); } catch (err) { return null; }
+    let sol; try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
     const list = Array.isArray(sol) ? sol : [sol];
-    const vals = list.map(x => x.toString());
+    const vals = list.map(x => x.toString()).filter(x => x !== '');
+    if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
     const work = ['Equation:', `  ${eq}`, '', 'Solve for ' + v + ':', ''];
     for (const s of vals) work.push(`  ${v} = ${s}`);
     return { answers: [{ v, val: vals.join(', ') }], work };
@@ -689,12 +702,10 @@
     let sol; try { sol = window.nerdamer.solve(eq, v); } catch (err) { return null; }
     const list = Array.isArray(sol) ? sol : [sol];
     const boundary = list.map(x => x.toString()).join(', ');
-    const work = [
-      'Inequality:', `  ${ineq}`, '',
-      'Solve the boundary equation:', `  ${eq}`, `  ${v} = ${boundary}`, '',
-      'Answer:', `  ${v} ${op} ${boundary}`
-    ];
-    return { answers: [{ v, val: `${op} ${boundary}` }], work };
+    return {
+      answers: [{ v, val: `${op} ${boundary}` }],
+      work: ['Inequality:', `  ${ineq}`, '', 'Solve the boundary equation:', `  ${eq}`, `  ${v} = ${boundary}`, '', 'Answer:', `  ${v} ${op} ${boundary}`]
+    };
   }
 
   function solveAbsolute(text) {
@@ -708,13 +719,10 @@
       sol1 = nd.solve(`${inner}=${rhs}`, 'x').toString();
       sol2 = nd.solve(`${inner}=−${rhs}`, 'x').toString();
     } catch (err) { return null; }
-    const work = [
-      'Absolute value equation:', `  |${inner}| = ${rhs}`, '',
-      'Split into two cases:',
-      `  Case 1:   ${inner} = ${rhs}    →   x = ${sol1}`,
-      `  Case 2:   ${inner} = −${rhs}   →   x = ${sol2}`
-    ];
-    return { answers: [{ v: 'x', val: `${sol1},   ${sol2}` }], work };
+    return {
+      answers: [{ v: 'x', val: `${sol1},   ${sol2}` }],
+      work: ['Absolute value equation:', `  |${inner}| = ${rhs}`, '', 'Split into two cases:', `  Case 1:   ${inner} = ${rhs}    →   x = ${sol1}`, `  Case 2:   ${inner} = −${rhs}   →   x = ${sol2}`]
+    };
   }
 
   function solveLog(text) {
@@ -759,7 +767,7 @@
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
-      work: ['Radical equation:', `  ${eq}`, '', 'Isolate the radical, square both sides, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check for extraneous solutions in the original equation)']
+      work: ['Radical equation:', `  ${eq}`, '', 'Isolate the radical, square both sides, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check for extraneous solutions)']
     };
   }
 
@@ -776,7 +784,7 @@
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
-      work: ['Rational equation:', `  ${eq}`, '', 'Multiply both sides by the LCD, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check excluded values from the original denominators)']
+      work: ['Rational equation:', `  ${eq}`, '', 'Multiply both sides by the LCD, solve:', '', ...vals.map(v => `  x = ${v}`), '', '(check excluded values)']
     };
   }
 
@@ -791,7 +799,7 @@
     if (!vals.length) return null;
     return {
       answers: [{ v: 'x', val: vals.join(', ') }],
-      work: ['Trig equation:', `  ${eq}`, '', 'General solution:', ...vals.map(v => `  x = ${v}`), '', '(n is any integer — period depends on the function)']
+      work: ['Trig equation:', `  ${eq}`, '', 'General solution:', ...vals.map(v => `  x = ${v}`), '', '(n is any integer)']
     };
   }
 
@@ -806,22 +814,17 @@
     if (ineqs.length < 2) return null;
     const work = ['System of inequalities:'];
     ineqs.forEach((ineq, i) => work.push(`  (${i+1})   ${ineq}`));
-    work.push('');
-    work.push('Solve each inequality for y and graph the boundary lines.');
-    work.push('Shade the overlapping region (test a point).');
-    work.push('');
+    work.push('', 'Solve each inequality for y and graph the boundary lines.', 'Shade the overlapping region (test a point).', '');
     for (let i = 0; i < ineqs.length; i++) {
       const v = ineqs[i].match(/([a-z])/i);
       if (!v) continue;
       const varName = v[1].toLowerCase();
       const opMatch = ineqs[i].match(/<=|>=|<|>/);
       if (!opMatch) continue;
-      const op = opMatch[0];
       const eq = ineqs[i].replace(/<=|>=|<|>/, '=');
       let sol; try { sol = nd.solve(eq, varName); } catch(e) { continue; }
       const list = Array.isArray(sol) ? sol : [sol];
-      const vals = list.map(x => x.toString());
-      work.push(`  (${i+1})   ${varName} ${op} ${vals.join(', ')}`);
+      work.push(`  (${i+1})   ${varName} ${opMatch[0]} ${list.map(x => x.toString()).join(', ')}`);
     }
     return { answers: [{ v: 'system', val: 'see work' }], work };
   }
@@ -831,7 +834,7 @@
     const m = text.match(/(?:add|subtract|multiply|divide|expand|simplify|rewrite in standard form)[:\s]+([^\n]+)/i) ||
               text.match(/(\([^\)]*[a-z][^\)]*\)\s*[\+\-\*\/×]\s*\([^\)]*[a-z][^\)]*\))/);
     if (!m) return null;
-    let expr = cleanLine(m[1] || m[0]).replace(/^.*?:\s*/, '');
+    const expr = cleanLine(m[1] || m[0]).replace(/^.*?:\s*/, '');
     let out;
     try { out = nd(expr).expand().toString(); } catch (err) { return null; }
     return {
@@ -864,8 +867,8 @@
       let out;
       try { out = nd.solve(`y=${fexpr}`, 'x').toString(); } catch(e) { return null; }
       return {
-        answers: [{ v: 'f⁻¹(x)', val: out.replace(/x/g, 'y') }],
-        work: ['f(x) = ' + fexpr, '', 'Set y = f(x), solve for x:', `  y = ${fexpr}`, `  x = ${out}`, '', `f⁻¹(x) = ${out.replace(/x/g, 'x')}`]
+        answers: [{ v: 'f⁻¹(x)', val: out }],
+        work: ['f(x) = ' + fexpr, '', 'Set y = f(x), solve for x:', `  y = ${fexpr}`, `  x = ${out}`, '', `f⁻¹(x) = ${out}`]
       };
     }
 
@@ -902,15 +905,6 @@
     const stdev = Math.sqrt(variance);
     const modeStr = modes.length === arr.length && maxF === 1 ? 'none' : modes.join(', ');
 
-    const work = [
-      'Data:', `  ${arr.join(', ')}`, '',
-      'Sorted:', `  ${sorted.join(', ')}`, '',
-      'Mean:', `  (${arr.join(' + ')}) / ${n} = ${frac(mean)}`,
-      'Median:', `  ${frac(median)}`,
-      'Mode:', `  ${modeStr}`,
-      'Range:', `  ${sorted[n-1]} − ${sorted[0]} = ${frac(range)}`,
-      'Standard deviation (sample):', `  ${frac(stdev)}`
-    ];
     return {
       answers: [
         { v: 'mean', val: frac(mean) },
@@ -919,7 +913,15 @@
         { v: 'range', val: frac(range) },
         { v: 'stdev', val: frac(stdev) },
       ],
-      work
+      work: [
+        'Data:', `  ${arr.join(', ')}`, '',
+        'Sorted:', `  ${sorted.join(', ')}`, '',
+        'Mean:', `  (${arr.join(' + ')}) / ${n} = ${frac(mean)}`,
+        'Median:', `  ${frac(median)}`,
+        'Mode:', `  ${modeStr}`,
+        'Range:', `  ${sorted[n-1]} − ${sorted[0]} = ${frac(range)}`,
+        'Standard deviation (sample):', `  ${frac(stdev)}`
+      ]
     };
   }
 
@@ -937,30 +939,22 @@
     const vertexX = -b / (2*a);
     const vertexY = a*vertexX*vertexX + b*vertexX + c;
     const disc = b*b - 4*a*c;
-    const axis = vertexX;
-    const yInt = c;
 
-    const work = [
-      'Quadratic:',
-      `  y = ${fmtQuadratic(a, b, c)}`, '',
-      `  a = ${a},   b = ${b},   c = ${c}`, '',
-      'Axis of symmetry:',
-      `  x = −b / (2a) = −(${b}) / (2·${a}) = ${frac(axis)}`, '',
-      'Vertex:',
-      `  x = ${frac(vertexX)},   y = ${frac(vertexY)}`,
-      `  (${frac(vertexX)}, ${frac(vertexY)})`, '',
-      'Discriminant:',
-      `  b² − 4ac = ${b}² − 4(${a})(${c}) = ${frac(disc)}`, '',
-      'Y-intercept:',
-      `  (0, ${frac(yInt)})`
-    ];
     return {
       answers: [
         { v: 'vertex', val: `(${frac(vertexX)}, ${frac(vertexY)})` },
-        { v: 'axis', val: `x = ${frac(axis)}` },
+        { v: 'axis', val: `x = ${frac(vertexX)}` },
         { v: 'discriminant', val: frac(disc) }
       ],
-      work
+      work: [
+        'Quadratic:', `  y = ${fmtQuadratic(a, b, c)}`, '',
+        `  a = ${a},   b = ${b},   c = ${c}`, '',
+        'Axis of symmetry:',
+        `  x = −b / (2a) = −(${b}) / (2·${a}) = ${frac(vertexX)}`, '',
+        'Vertex:', `  (${frac(vertexX)}, ${frac(vertexY)})`, '',
+        'Discriminant:', `  b² − 4ac = ${b}² − 4(${a})(${c}) = ${frac(disc)}`, '',
+        'Y-intercept:', `  (0, ${frac(c)})`
+      ]
     };
   }
 
@@ -991,23 +985,16 @@
       if (a[0] === bb[0]) return null;
       m = (bb[1] - a[1]) / (bb[0] - a[0]);
       b = a[1] - m * a[0];
-    } else {
-      return null;
-    }
+    } else return null;
 
     const mStr = frac(m);
-    const bStr = frac(b);
     const bSign = b >= 0 ? '+ ' : '− ';
     const eq = `y = ${mStr === '1' ? '' : mStr === '−1' ? '−' : mStr}x ${bSign}${frac(Math.abs(b))}`;
 
-    const work = [
-      'Line equation:', '',
-      `  slope m = ${mStr}`,
-      `  y-intercept b = ${bStr}`, '',
-      'Slope-intercept form:',
-      `  ${eq}`
-    ];
-    return { answers: [{ v: 'y', val: eq.slice(4) }], work };
+    return {
+      answers: [{ v: 'y', val: eq.slice(4) }],
+      work: ['Line equation:', '', `  slope m = ${mStr}`, `  y-intercept b = ${frac(b)}`, '', 'Slope-intercept form:', `  ${eq}`]
+    };
   }
 
   function solveSequence(text) {
@@ -1018,20 +1005,14 @@
 
     const d1 = arr[1] - arr[0];
     const d2 = arr[2] - arr[1];
-    const isArith = Math.abs(d1 - d2) < 1e-10;
-
-    if (isArith) {
+    if (Math.abs(d1 - d2) < 1e-10) {
       const d = d1;
       const next = arr[arr.length - 1] + d;
       const an = arr[0] + (arr.length - 1) * d;
-      const work = [
-        'Sequence:', `  ${arr.join(', ')}`, '',
-        'Common difference:', `  d = ${arr[1]} − ${arr[0]} = ${frac(d)}`,
-        `  (check: ${arr[2]} − ${arr[1]} = ${frac(d2)})`, '',
-        `Last given term (n=${arr.length}):`, `  a${arr.length} = ${frac(an)}`,
-        `Next term:`, `  a${arr.length+1} = ${frac(an)} + ${frac(d)} = ${frac(next)}`
-      ];
-      return { answers: [{ v: 'd', val: frac(d) }, { v: 'next', val: frac(next) }], work };
+      return {
+        answers: [{ v: 'd', val: frac(d) }, { v: 'next', val: frac(next) }],
+        work: ['Sequence:', `  ${arr.join(', ')}`, '', 'Common difference:', `  d = ${arr[1]} − ${arr[0]} = ${frac(d)}`, `  (check: ${arr[2]} − ${arr[1]} = ${frac(d2)})`, '', `Last given term (n=${arr.length}):`, `  a${arr.length} = ${frac(an)}`, `Next term:`, `  a${arr.length+1} = ${frac(an)} + ${frac(d)} = ${frac(next)}`]
+      };
     }
 
     if (arr[0] !== 0) {
@@ -1039,13 +1020,10 @@
       const r2 = arr[2] / arr[1];
       if (Math.abs(r1 - r2) < 1e-10) {
         const next = arr[arr.length - 1] * r1;
-        const work = [
-          'Sequence:', `  ${arr.join(', ')}`, '',
-          'Common ratio:', `  r = ${arr[1]} / ${arr[0]} = ${frac(r1)}`,
-          `  (check: ${arr[2]} / ${arr[1]} = ${frac(r2)})`, '',
-          'Next term:', `  ${frac(arr[arr.length-1])} × ${frac(r1)} = ${frac(next)}`
-        ];
-        return { answers: [{ v: 'r', val: frac(r1) }, { v: 'next', val: frac(next) }], work };
+        return {
+          answers: [{ v: 'r', val: frac(r1) }, { v: 'next', val: frac(next) }],
+          work: ['Sequence:', `  ${arr.join(', ')}`, '', 'Common ratio:', `  r = ${arr[1]} / ${arr[0]} = ${frac(r1)}`, `  (check: ${arr[2]} / ${arr[1]} = ${frac(r2)})`, '', 'Next term:', `  ${frac(arr[arr.length-1])} × ${frac(r1)} = ${frac(next)}`]
+        };
       }
     }
     return null;
@@ -1061,40 +1039,27 @@
       const circ = 2 * Math.PI * r;
       return {
         answers: [{ v: 'area', val: frac(Math.round(area*100)/100) }, { v: 'circumference', val: frac(Math.round(circ*100)/100) }],
-        work: [
-          'Circle, r = ' + r, '',
-          'Area:', `  A = πr² = π(${r})² = ${frac(Math.round(area*100)/100)}`,
-          'Circumference:', `  C = 2πr = 2π(${r}) = ${frac(Math.round(circ*100)/100)}`
-        ]
+        work: ['Circle, r = ' + r, '', 'Area:', `  A = πr² = π(${r})² = ${frac(Math.round(area*100)/100)}`, 'Circumference:', `  C = 2πr = 2π(${r}) = ${frac(Math.round(circ*100)/100)}`]
       };
     }
 
     const lM = t.match(/length\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
     const wM = t.match(/width\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
     if (lM && wM) {
-      const l = parseFloat(lM[1]);
-      const w = parseFloat(wM[1]);
+      const l = parseFloat(lM[1]), w = parseFloat(wM[1]);
       return {
         answers: [{ v: 'area', val: frac(l*w) }, { v: 'perimeter', val: frac(2*(l+w)) }],
-        work: [
-          `Rectangle, l = ${l}, w = ${w}`, '',
-          'Area:', `  A = l × w = ${l} × ${w} = ${frac(l*w)}`,
-          'Perimeter:', `  P = 2l + 2w = 2(${l}) + 2(${w}) = ${frac(2*(l+w))}`
-        ]
+        work: [`Rectangle, l = ${l}, w = ${w}`, '', 'Area:', `  A = l × w = ${l} × ${w} = ${frac(l*w)}`, 'Perimeter:', `  P = 2l + 2w = 2(${l}) + 2(${w}) = ${frac(2*(l+w))}`]
       };
     }
 
     const bM = t.match(/base\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
     const hM = t.match(/height\s*(?:of|=|is)?\s*(\d+\.?\d*)/i);
     if (bM && hM) {
-      const b = parseFloat(bM[1]);
-      const h = parseFloat(hM[1]);
+      const b = parseFloat(bM[1]), h = parseFloat(hM[1]);
       return {
         answers: [{ v: 'area', val: frac(b*h/2) }],
-        work: [
-          `Triangle, b = ${b}, h = ${h}`, '',
-          'Area:', `  A = ½bh = ½(${b})(${h}) = ${frac(b*h/2)}`
-        ]
+        work: [`Triangle, b = ${b}, h = ${h}`, '', 'Area:', `  A = ½bh = ½(${b})(${h}) = ${frac(b*h/2)}`]
       };
     }
     return null;
@@ -1105,7 +1070,7 @@
   // ============================================================
   const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
 
-The input text is scraped from a homework page and may contain noise (menu labels, headers, mangled KaTeX with fractions split across lines). Reconstruct the intended problem first, then solve.
+The input text is scraped from a homework page and may contain noise (menu labels, headers, mangled KaTeX). Reconstruct the intended problem first, then solve.
 
 Return ONLY valid JSON, no prose, matching this exact shape:
 {
@@ -1113,24 +1078,14 @@ Return ONLY valid JSON, no prose, matching this exact shape:
   "meanings": {"x": "Bill's age", "y": "Sam's age"},
   "equations": ["x = 2y", "(x+5) + (y+5) = 40"],
   "solution": {"x": "10", "y": "5"},
-  "work": [
-    "Let x = Bill's age and y = Sam's age.",
-    "From 'Bill is twice as old as Sam': x = 2y",
-    "From 'in 5 years the sum will be 40': (x+5) + (y+5) = 40",
-    "Substitute x = 2y: (2y+5) + (y+5) = 40",
-    "3y + 10 = 40",
-    "3y = 30",
-    "y = 10",
-    "x = 2(10) = 20",
-    "Bill is 20, Sam is 10."
-  ]
+  "work": ["Let x = Bill's age...", "x = 2y", "..."]
 }
 
 Rules:
 - Equations use standard math notation (x, y, =, +, -, *, /, ^).
 - Solution values are exact — use fractions like "3/2" instead of "1.5" when applicable.
-- Work steps read like a student writing in a notebook. Plain text, one step per line.
-- If the problem is unsolvable or not a math problem, return {"error": "reason"}.`;
+- Work steps read like a student writing in a notebook.
+- If unsolvable or not a math problem, return {"error": "reason"}.`;
 
   function wrapText(s, width) {
     const words = s.split(/\s+/);
@@ -1151,10 +1106,7 @@ Rules:
 
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + key,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
       body: JSON.stringify({
         model: CONFIG.GROQ_MODEL,
         temperature: 0,
@@ -1185,31 +1137,21 @@ Rules:
     showToast('asking AI…');
     let data;
     try { data = await askGroq(clean); }
-    catch (e) {
-      console.warn(e);
-      showToast('Groq call failed — see console');
-      return null;
-    }
+    catch (e) { console.warn(e); showToast('Groq call failed — see console'); return null; }
     if (data.error) { showToast('AI: ' + data.error); return null; }
     if (!data.solution || !data.variables) { showToast('AI gave bad response'); return null; }
 
     const answers = data.variables.map(v => ({
-      v,
-      val: data.solution[v] != null ? String(data.solution[v]) : '?',
+      v, val: data.solution[v] != null ? String(data.solution[v]) : '?',
     }));
 
-    const work = [];
-    work.push('Word problem:');
-    work.push('');
+    const work = ['Word problem:', ''];
     wrapText(clean, 68).forEach(l => work.push('  ' + l));
-    work.push('');
-    work.push('Assign variables:');
+    work.push('', 'Assign variables:');
     data.variables.forEach(v => work.push(`  ${v} = ${data.meanings?.[v] || v}`));
-    work.push('');
-    work.push('Set up equations:');
+    work.push('', 'Set up equations:');
     (data.equations || []).forEach((eq, i) => work.push(`  (${i + 1})   ${eq}`));
-    work.push('');
-    work.push('Solve:');
+    work.push('', 'Solve:');
     (data.work || []).forEach(line => work.push(`  ${line}`));
 
     return { answers, work };
@@ -1252,7 +1194,6 @@ Rules:
     if (/\bdistance\b|\bmidpoint\b/i.test(t)) return 'distance';
     if (/\b(area|perimeter|circumference|volume)\b/i.test(t)) return 'geometry';
 
-    // Word problem — only when there is genuinely no equation anywhere on the page
     const wordCount = (t.match(/\b[a-z]+\b/gi) || []).length;
     const hasEquation = /[=<>≤≥]/.test(t) || /[a-z]\s*[\^²]/.test(t);
     if (!hasEquation && wordCount > 20) return 'word';
@@ -1336,18 +1277,45 @@ Rules:
     setTimeout(() => document.addEventListener('click', off, true), 0);
   }
 
+  // ============================================================
+  // SELF UPDATE — full teardown + reinject
+  // ============================================================
   async function selfUpdate() {
     if (!CONFIG.SELF_UPDATE_URL) { showToast('no SELF_UPDATE_URL set'); return; }
+
+    // 1. fetch fresh code FIRST — never tear down unless we have a replacement
+    showToast('updating…');
+    let code;
     try {
-      const t = await (await fetch(CONFIG.SELF_UPDATE_URL)).text();
+      const url = CONFIG.SELF_UPDATE_URL + (CONFIG.SELF_UPDATE_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      code = await r.text();
+      if (!code || code.length < 200) throw new Error('empty response');
+    } catch (e) {
+      console.warn(e);
+      showToast('update failed — fetch');
+      return;
+    }
+
+    // 2. full teardown of the current instance
+    try { runCleanup(); } catch (e) { console.warn(e); }
+    document.querySelectorAll('#__dm_btn, #__dm_modal, #__dm_menu, #__dm_toast').forEach(n => n.remove());
+    [...document.querySelectorAll('[id^="__dm_"]')].forEach(n => n.remove());
+    window.__dm3 = 0;
+
+    // 3. let the browser settle
+    await new Promise(res => setTimeout(res, 60));
+
+    // 4. inject fresh version
+    try {
+      (0, eval)(code);
+      console.log('%c[vite] updated to fresh build', 'color:#8a8a8a');
+    } catch (e) {
+      console.warn(e);
+      console.error('[vite] update eval failed — old instance gone. Re-paste manually.');
       window.__dm3 = 0;
-      document.querySelectorAll('#__dm_modal,#__dm_menu,#__dm_toast').forEach(n => n.remove());
-      [...document.querySelectorAll('div')].forEach(d => {
-        if (d.style.position === 'fixed' && d.style.bottom === '20px' && d.style.right === '20px') d.remove();
-      });
-      (0, eval)(t);
-      showToast('updated');
-    } catch (e) { showToast('update failed'); }
+    }
   }
 
   // ============================================================
@@ -1397,6 +1365,7 @@ Rules:
     box.querySelector('#__dm_close').onclick = () => wrap.remove();
     const onKey = e => { if (e.key === 'Escape') { wrap.remove(); document.removeEventListener('keydown', onKey); } };
     document.addEventListener('keydown', onKey);
+    onCleanup(() => document.removeEventListener('keydown', onKey));
   }
 
   function showToast(text) {
@@ -1412,3 +1381,4 @@ Rules:
 
   console.log('%c[vite] connected', 'color:#8a8a8a');
 })();
+                                                                  
