@@ -1,6 +1,6 @@
 # dm-helper
 
-thing I made for DeltaMath. It reads the problem off the page, solves it, and shows the work.
+console script I made for DeltaMath. It reads the problem off the page, solves it, and shows the work.
 
 No install, no extension, no account. Just paste a line into the browser console.
 
