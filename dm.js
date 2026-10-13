@@ -616,12 +616,118 @@
     const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
     if (vars.length !== 1) { console.log('[vite] nSingle: not single-var', vars); return null; }
     const v = vars[0];
-    let sol; try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
+
+    let sol;
+    try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
     const vals = nerdamerVals(sol);
     if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
-    const work = ['Equation:', `  ${eq}`, '', 'Solve for ' + v + ':', ''];
-    for (const s of vals) work.push(`  ${v} = ${s}`);
-    return { answers: [{ v, val: vals.join(', ') }], work };
+    const answer = { v, val: vals.join(', ') };
+    const fallback = () => ({ answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] });
+
+    // split into LHS and RHS, extract coefficient+constant of each
+    const parts = eq.split('=');
+    if (parts.length !== 2) return fallback();
+    const lhs = parts[0].trim();
+    const rhs = parts[1].trim();
+
+    function toNum(o) {
+      try { return Number(o.text('decimals')); }
+      catch (e) { return Number(o.toString()); }
+    }
+    function analyze(expr) {
+      try {
+        const f0 = toNum(nd(expr).sub(v, 0).evaluate());
+        const f1 = toNum(nd(expr).sub(v, 1).evaluate());
+        const f2 = toNum(nd(expr).sub(v, 2).evaluate());
+        if (Math.abs((f2 - f1) - (f1 - f0)) > 1e-7) return null;
+        return { coef: f1 - f0, constant: f0 };
+      } catch (e) { return null; }
+    }
+
+    const L = analyze(lhs);
+    const R = analyze(rhs);
+    if (!L || !R) return fallback();
+
+    const term = c => {
+      if (Math.abs(c - 1) < 1e-10) return v;
+      if (Math.abs(c + 1) < 1e-10) return '−' + v;
+      return frac(c) + v;
+    };
+    const C = x => frac(x);
+
+    const work = [];
+    work.push('Equation:');
+    work.push('  ' + eq);
+    work.push('');
+
+    // Case A — variable only on the right
+    if (Math.abs(L.coef) < 1e-10 && Math.abs(R.coef) > 1e-10) {
+      const a = R.coef, b = R.constant, c = L.constant;
+      work.push('Rewrite with the variable on the left:');
+      work.push(`  ${term(a)} + ${C(b)} = ${C(c)}`);
+      work.push('');
+      if (Math.abs(b) > 1e-10) {
+        work.push(`Subtract ${C(b)} from both sides:`);
+        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
+        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push('');
+      }
+      if (Math.abs(a - 1) > 1e-10) {
+        if (Math.abs(a) < 1) {
+          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
+        } else {
+          work.push(`Divide both sides by ${C(a)}:`);
+        }
+        work.push(`  ${v} = ${C((c - b) / a)}`);
+        work.push('');
+      }
+    }
+    // Case B — variable only on the left
+    else if (Math.abs(R.coef) < 1e-10 && Math.abs(L.coef) > 1e-10) {
+      const a = L.coef, b = L.constant, c = R.constant;
+      if (Math.abs(b) > 1e-10) {
+        work.push(`Subtract ${C(b)} from both sides:`);
+        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
+        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push('');
+      }
+      if (Math.abs(a - 1) > 1e-10) {
+        if (Math.abs(a) < 1) {
+          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
+        } else {
+          work.push(`Divide both sides by ${C(a)}:`);
+        }
+        work.push(`  ${v} = ${C((c - b) / a)}`);
+        work.push('');
+      }
+    }
+    // Case C — variables on both sides
+    else if (Math.abs(L.coef) > 1e-10 && Math.abs(R.coef) > 1e-10) {
+      const a1 = L.coef, b1 = L.constant, a2 = R.coef, b2 = R.constant;
+      const a = a1 - a2, b = b1, c = b2;
+      work.push(`Subtract ${term(a2)} from both sides to get the variable on one side:`);
+      work.push(`  ${term(a1)} + ${C(b1)} − ${term(a2)} = ${C(b2)} − ${term(a2)}`);
+      work.push(`  ${term(a)} + ${C(b)} = ${C(c)}`);
+      work.push('');
+      if (Math.abs(b) > 1e-10) {
+        work.push(`Subtract ${C(b)} from both sides:`);
+        work.push(`  ${term(a)} + ${C(b)} − ${C(b)} = ${C(c)} − ${C(b)}`);
+        work.push(`  ${term(a)} = ${C(c - b)}`);
+        work.push('');
+      }
+      if (Math.abs(a - 1) > 1e-10) {
+        if (Math.abs(a) < 1) {
+          work.push(`Multiply both sides by ${C(1/a)} (the reciprocal of ${C(a)}):`);
+        } else {
+          work.push(`Divide both sides by ${C(a)}:`);
+        }
+        work.push(`  ${v} = ${C((c - b) / a)}`);
+        work.push('');
+      }
+    }
+
+    work.push(`Solution:   ${v} = ${vals.join(', ')}`);
+    return { answers: [answer], work };
   }
 
   function nQuadratic(text) {
