@@ -104,7 +104,7 @@ For the visual ones, right-click the button → **Copy problem screenshot**, pas
 
 ## I found a bug / it doesn't work
 
-Right-click the `?` button → **View failed problems**. Click **Copy all text**. Send me what shows up.
+Right-click the `?` button → **View failed problems**. Click **Copy all text**. Send me what shows up - make a GitHub issue.
 
 That gives me the exact problem text so I can add the solver.
 
