@@ -99,19 +99,6 @@ That tells me exactly what went wrong.
 
 ---
 
-## Custom icon
-
-Want to use your own picture for the little button?
-
-1. Put a square image in your GitHub repo (like `logo.png`)
-2. Open `dm.js` and find the line that says `LOGO_URL: ''`
-3. Change it to `LOGO_URL: 'https://raw.githubusercontent.com/YOURUSER/YOURREPO/main/logo.png'`
-4. Save and push
-
-That's it.
-
----
-
 ## Setup (for whoever is hosting this)
 
 1. Create a new GitHub repo (make it public)
