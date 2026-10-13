@@ -250,12 +250,11 @@
     const body = cut > 0 ? raw.slice(0, cut) : raw;
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
     lines = lines.filter(l => {
-    if (!l) return false;
-    if (/^=\s*\S/.test(l)) return false;
-    if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
-    if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
-    return true;
-    if (/^=\s*[A-Z]/.test(l)) return false;
+      if (!l) return false;
+      if (/^=/.test(l)) return false;
+      if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
+      if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
+      return true;
     });
     const merged = [];
     for (let i = 0; i < lines.length; i++) {
