@@ -8,7 +8,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    AI_MODEL: 'gemini-2.5-flash',
+    AI_MODEL: 'gemini-flash-latest',
     OWNER_WEBHOOK: '',
   };
 
@@ -246,12 +246,21 @@
     if (!target) return '';
     try {
       showToast('reading equations…');
-      const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
+      // scale 4 = much sharper text for tesseract, and constrain the character set
+      const canvas = await window.html2canvas(target, { scale: 4, logging: false, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/png');
-      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
+      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {
+        tessedit_char_whitelist: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=+-*/()<>≤≥., ',
+        tessedit_pageseg_mode: '6',
+      });
       let cleaned = text;
       const cut = cleaned.search(/\bAttempt\b/i);
       if (cut > 0) cleaned = cleaned.slice(0, cut);
+      // common OCR misreads of x when isolated as a coefficient or single var
+      cleaned = cleaned
+        .replace(/(^|\s|[-+*/=(])[zZ](?=\s*[=y+\-*/)]|$|\s)/g, '$1x')
+        .replace(/(^|\s|[-+*/=(])[gq](?=\s*[=y+\-*/)]|$|\s)/g, '$1x')
+        .replace(/\b([xX])and\b/g, '$1 and');
       return cleaned.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).filter(l => l.length > 0).join('\n');
     } catch (e) { console.warn('screenshot+OCR failed', e); return ''; }
   }
