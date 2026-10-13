@@ -1,5 +1,5 @@
 /* DeltaMath assistant — single-file console script
- * Load: fetch('https://raw.githubusercontent.com/<you>/<repo>/main/dm.js').then(r=>r.text()).then(eval)
+ * Load: fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
  */
 
 (function () {
@@ -10,7 +10,7 @@
   // CONFIG
   // ============================================================
   const CONFIG = {
-    SELF_UPDATE_URL: '',
+    SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
   };
 
