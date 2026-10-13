@@ -1654,6 +1654,7 @@ Rules:
       return;
     }
     showModal(r);
+  }
 
   // MENU
   function openMenu() {
