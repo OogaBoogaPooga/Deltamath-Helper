@@ -1445,10 +1445,13 @@ Rules:
     let key = getApiKey();
     if (!key) key = promptForKey();
     if (!key) throw new Error('no key');
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.AI_MODEL}:generateContent?key=${key}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.AI_MODEL}:generateContent`;
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': key,
+      },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: AI_SYSTEM_PROMPT }] },
         contents: [{ parts: [{ text: userText }] }],
