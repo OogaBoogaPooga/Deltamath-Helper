@@ -1180,7 +1180,83 @@
     }
     return null;
   }
+  
+  // ============================================================
+  // PROPERTIES OF REAL NUMBERS
+  // ============================================================
+  function mkProp(name) {
+    return {
+      answers: [{ v: 'Property', val: name }],
+      work: ['Property illustrated:', '', `  ${name}`]
+    };
+  }
 
+  function solveProperty(text) {
+    const m = text.match(/([^\n]*=\s*[^\n]*)/);
+    if (!m) return null;
+    const eq = cleanLine(m[0]).replace(/\s+/g, '');
+    const parts = eq.split('=');
+    if (parts.length !== 2) return null;
+    const lhs = parts[0];
+    const rhs = parts[1];
+    if (!lhs || !rhs) return null;
+
+    // verify both sides are actually equal (property demo, not a solve)
+    try {
+      const lExp = window.nerdamer(lhs).expand().toString();
+      const rExp = window.nerdamer(rhs).expand().toString();
+      const diff = window.nerdamer(`${lExp}-(${rExp})`).expand().toString();
+      if (diff !== '0') return null;
+    } catch (e) { return null; }
+
+    // Distributive: one side has a parenthesized sum being multiplied, other doesn't
+    const hasDistL = /[a-z0-9]\s*\(\s*[^)]*[+\-][^)]*\)/.test(lhs);
+    const hasDistR = /[a-z0-9]\s*\(\s*[^)]*[+\-][^)]*\)/.test(rhs);
+    if (hasDistL !== hasDistR) return mkProp('Distributive Property');
+
+    // Zero property
+    const lExp2 = window.nerdamer(lhs).expand().toString();
+    const rExp2 = window.nerdamer(rhs).expand().toString();
+    if (lExp2 === '0' || rExp2 === '0') return mkProp('Zero Property of Multiplication');
+
+    // Identity
+    if (/[*×]\s*1\b|\b1\s*[*×]/.test(lhs) || /[*×]\s*1\b|\b1\s*[*×]/.test(rhs)) {
+      return mkProp('Identity Property of Multiplication');
+    }
+    if (/\+\s*0\b|\b0\s*\+/.test(lhs) || /\+\s*0\b|\b0\s*\+/.test(rhs)) {
+      return mkProp('Identity Property of Addition');
+    }
+
+    // Inverse
+    // a + (-a) = 0
+    const varL = (lhs.match(/[a-z]/gi) || []).map(c => c.toLowerCase());
+    const varR = (rhs.match(/[a-z]/gi) || []).map(c => c.toLowerCase());
+    const anyVar = varL[0] || varR[0];
+    if (anyVar) {
+      const re1 = new RegExp(`\\+\\s*\\(?\\s*[-−]\\s*${anyVar}\\s*\\)?`);
+      const re2 = new RegExp(`${anyVar}\\s*[*×]\\s*\\(?\\s*1\\s*/\\s*${anyVar}\\s*\\)?`);
+      if (re1.test(lhs) || re1.test(rhs)) return mkProp('Inverse Property of Addition');
+      if (re2.test(lhs) || re2.test(rhs)) return mkProp('Inverse Property of Multiplication');
+    }
+
+    // Associative vs Commutative — compare token order ignoring parens
+    const strip = s => s.replace(/[()[\]{}]/g, '');
+    const tL = strip(lhs), tR = strip(rhs);
+    const isAdd = /\+/.test(lhs) && !/[*×]/.test(lhs.replace(/[-−]/g, ''));
+
+    if (tL === tR) {
+      // same order, different grouping → Associative
+      return mkProp(isAdd ? 'Associative Property of Addition' : 'Associative Property of Multiplication');
+    }
+    const sortedL = tL.split('').sort().join('');
+    const sortedR = tR.split('').sort().join('');
+    if (sortedL === sortedR) {
+      // same pieces, different order → Commutative
+      return mkProp(isAdd ? 'Commutative Property of Addition' : 'Commutative Property of Multiplication');
+    }
+
+    return null;
+  }
   // ============================================================
   // WORD PROBLEM SOLVER (Groq)
   // ============================================================
@@ -1278,6 +1354,7 @@ Rules:
   // ============================================================
   function detect(t) {
     if (/\bsolve the (following )?system\b/i.test(t)) return 'system';
+    if (/\bname the property\b/i.test(t) || /\bproperties?\s+of\s+real\s+numbers?\b/i.test(t)) return 'property';
     if (/\bsolve\b/i.test(t) && /[<>≤≥]/.test(t) && /[a-z]\s*[<>≤≥]/.test(t)) {
       const ineqCount = (t.match(/[<>≤≥]/g) || []).length;
       if (ineqCount >= 2) return 'systemIneq';
@@ -1356,6 +1433,7 @@ Rules:
       line: solveLine,
       polyOps: nd ? solvePolyOps : null,
       geometry: solveGeometry,
+      property: solveProperty,
       word: solveWordProblem,
     };
     const fn = table[type];
