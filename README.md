@@ -8,7 +8,7 @@ Solve any DeltaMath problem and get the full work — no install, just paste one
 
 **Step 1.** Open your DeltaMath problem like normal.
 
-**Step 2.** Press `F12` to open DevTools. (On Mac: `Cmd + Option + I`.)
+**Step 2.** Press `F12` to open DevTools. (On Chromebook: `Ctrl + Shift + I`.)
 
 **Step 3.** Click the **Console** tab at the top.
 
