@@ -471,7 +471,7 @@
         if (Math.abs(co) < 1e-9) continue;
         rhsParts.push({ v: other, c: -co });
       }
-      const kConst = -eq.rhs;
+      const kConst = eq.rhs;
       const m = c;
       let exprPieces = [];
       for (const rp of rhsParts) {
