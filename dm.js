@@ -1,6 +1,5 @@
-/* DeltaMath assistant — single-file console script
- * Load: fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
- */
+// dm.js — solvers for deltamath problems
+// load: fetch('https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js').then(r=>r.text()).then(eval)
 
 (function () {
   if (window.__dm3) { console.log('already running'); return; }
@@ -10,7 +9,7 @@
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
     GROQ_MODEL: 'openai/gpt-oss-120b',
-    OWNER_WEBHOOK: 'https://discord.com/api/webhooks/1559592439679819847/lWj3OKi3SAlSQtXuKelBepaMC7y-qM-CdxYDrivVIcwM4rcxrwml5xvz4Qzq8T-rBELU', // Discord webhook URL to receive failed problems
+    OWNER_WEBHOOK: '', // paste your discord webhook here if you want failures sent to you
   };
 
   const KEY_STORAGE = '__dm_groq_key';
@@ -36,7 +35,7 @@
   function loadScript(urls, name, onDone) {
     let i = 0;
     function tryNext() {
-      if (i >= urls.length) { console.warn('[vite] failed to load ' + name); return; }
+      if (i >= urls.length) { console.warn('failed to load ' + name); return; }
       const s = document.createElement('script');
       s.src = urls[i++];
       s.onload = () => onDone && onDone();
@@ -45,11 +44,11 @@
     }
     tryNext();
   }
-  loadScript(CDN.nerdamer, 'nerdamer', () => { if (window.nerdamer) console.log('%c[vite] nerdamer ready', 'color:#8a8a8a'); });
-  loadScript(CDN.tesseract, 'tesseract', () => { if (window.Tesseract) console.log('%c[vite] ocr ready', 'color:#8a8a8a'); });
-  loadScript(CDN.html2canvas, 'html2canvas', () => { if (window.html2canvas) console.log('%c[vite] html2canvas ready', 'color:#8a8a8a'); });
+  loadScript(CDN.nerdamer, 'nerdamer', () => { if (window.nerdamer) console.log('nerdamer loaded'); });
+  loadScript(CDN.tesseract, 'tesseract', () => { if (window.Tesseract) console.log('ocr loaded'); });
+  loadScript(CDN.html2canvas, 'html2canvas', () => { if (window.html2canvas) console.log('html2canvas loaded'); });
 
-  // BUTTON
+  // the little ? button
   const btn = document.createElement('div');
   btn.id = '__dm_btn';
   btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;border:1px solid rgba(0,0,0,.05);box-shadow:0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10);transition:background .12s ease, box-shadow .12s ease;`;
@@ -60,7 +59,6 @@
   btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); run(); }, true);
   btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); openMenu(); }, true);
 
-  // HELPERS
   function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a; }
   function frac(x) {
     if (typeof x === 'string') return x;
@@ -86,7 +84,7 @@
   function nerdamerVals(sol) { const list = Array.isArray(sol) ? sol : [sol]; return list.map(x => unwrap(x.toString())).filter(v => v !== ''); }
   function flipOp(o) { return { '<': '>', '<=': '>=', '>': '<', '>=': '<=' }[o] || o; }
 
-  // MATH DOM WALKER
+  // walk the math DOM (mathquill, katex, mathml) and turn it back into plain text
   function walkMath(node) {
     if (!node) return '';
     if (node.nodeType === 3) return node.textContent || '';
@@ -120,7 +118,6 @@
     return out;
   }
 
-  // PROBLEM TEXT
   function problemText() {
     const clone = document.body.cloneNode(true);
     clone.querySelectorAll('script, style, noscript, link, meta, svg').forEach(n => n.remove());
@@ -161,7 +158,7 @@
     }
     const result = out.join('\n');
     if (!/[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(result)) {
-      console.log('[vite] no equations in walkMath output — using raw innerText');
+      console.log('no equations in parsed DOM, using raw innerText');
       const rawBody = String(document.body.innerText)
         .replace(/[\u2212\u2013\u2014\u2015]/g, '-')
         .replace(/[\u00a0\u2007\u202f]/g, ' ')
@@ -173,7 +170,24 @@
     return result;
   }
 
-  // OCR + screenshot
+  // "2and" -> "2 and " and split "A=B and C=D" onto separate lines
+  function normalizeEqText(text) {
+    let t = text.replace(/(\d)\s*and\s+/gi, '$1 and ');
+    const lines = t.split('\n');
+    const out = [];
+    for (const l of lines) {
+      if ((l.match(/=/g) || []).length >= 2 && /\band\b/i.test(l)) {
+        const parts = l.split(/\band\b/i).map(s => s.trim()).filter(Boolean);
+        if (parts.length === 2 && parts.every(p => /=/.test(p))) {
+          parts.forEach(p => out.push(p));
+          continue;
+        }
+      }
+      out.push(l);
+    }
+    return out.join('\n');
+  }
+
   function findQuestionImages() {
     return [...document.querySelectorAll('img')].filter(im => {
       const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
@@ -185,7 +199,7 @@
     });
   }
   async function ocrImages() {
-    if (!window.Tesseract) { showToast('OCR engine not ready'); return ''; }
+    if (!window.Tesseract) { showToast('OCR not ready'); return ''; }
     const imgs = findQuestionImages();
     if (!imgs.length) return '';
     const out = [];
@@ -207,7 +221,7 @@
         if (!target || t.length < (target.innerText || '').length) target = el;
       }
     }
-    if (!target) { showToast('Could not find question region'); return; }
+    if (!target) { showToast('could not find question area'); return; }
     try {
       showToast('capturing…');
       if (window.html2canvas) {
@@ -237,25 +251,14 @@
       const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/png');
       const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
-      // Cut at "Attempt" — that's where the answer area starts and the useful text ends
       let cleaned = text;
       const cut = cleaned.search(/\bAttempt\b/i);
       if (cut > 0) cleaned = cleaned.slice(0, cut);
-      // Preserve line breaks so the rest of the pipeline can split per-line
       return cleaned.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).filter(l => l.length > 0).join('\n');
-    } catch (e) { console.warn('[vite] screenshot+OCR failed', e); return ''; }
+    } catch (e) { console.warn('screenshot+OCR failed', e); return ''; }
   }
-    if (!target) return '';
-    try {
-      showToast('reading equations…');
-      const canvas = await window.html2canvas(target, { scale: 2, logging: false, useCORS: true, backgroundColor: '#ffffff' });
-      const dataUrl = canvas.toDataURL('image/png');
-      const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {});
-      return cleanLine(text.replace(/\n+/g, ' '));
-    } catch (e) { console.warn('[vite] screenshot+OCR failed', e); return ''; }
-  }
-  
-  // EQUATION MODEL
+
+  // linear equation parsing helpers
   function parseSideSide(s) {
     const coef = {}; let constVal = 0;
     const tokens = String(s).replace(/\s/g, '').match(/[+-]?\d*\.?\d*[a-z]|[+-]?\d+\.?\d*/gi) || [];
@@ -321,7 +324,7 @@
     ];
   }
 
-  // ELIMINATION NARRATOR
+  // paper-style elimination walkthrough
   function narrateSystem(eqs, vars) {
     const out = ['Given system:', ''];
     for (let i = 0; i < eqs.length; i++) out.push(`  (${i + 1})   ${fmtEq(eqs[i], vars)}`);
@@ -432,7 +435,7 @@
     return { answers: vars.map(v => ({ v, val: frac(sol[v]) })), work: out };
   }
 
-  // SUBSTITUTION NARRATOR
+  // substitution walkthrough
   function narrateSubstitution(eqs, vars, origLines) {
     const out = ['Given system:', ''];
     origLines.forEach((l, i) => out.push(`  (${i + 1})   ${l}`));
@@ -575,7 +578,6 @@
     return { answers: vars.map(v => ({ v, val: sol[v] })), work: out };
   }
 
-  // SOLVERS
   function nSystem(text) {
     const isSub = /by substitution/i.test(text);
     const lines = text.split('\n').filter(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
@@ -590,23 +592,23 @@
     const vars = [...varSet].sort();
     if (eqs.length !== vars.length) return null;
     try { return isSub ? narrateSubstitution(eqs, vars, origLines) : narrateSystem(eqs, vars); }
-    catch (err) { console.warn('[vite] narrate error', err); return null; }
+    catch (err) { console.warn('narrate error', err); return null; }
   }
 
   function nSingle(text) {
     const nd = window.nerdamer;
     const eqLine = text.split('\n').find(l => /=/.test(l) && /[a-z]/i.test(l) && !/^\s*=/.test(l));
-    if (!eqLine) { console.log('[vite] nSingle: no equation line'); return null; }
+    if (!eqLine) { console.log('nSingle: no equation'); return null; }
     let eq = cleanLine(eqLine);
     eq = eq.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, '($1/$2)');
-    console.log('[vite] nSingle: solving', eq);
+    console.log('nSingle: solving', eq);
     const vars = [...new Set(eq.match(/[a-z]/gi) || [])].map(v => v.toLowerCase());
-    if (vars.length !== 1) { console.log('[vite] nSingle: not single-var', vars); return null; }
+    if (vars.length !== 1) { console.log('nSingle: not single var', vars); return null; }
     const v = vars[0];
     let sol;
-    try { sol = nd.solve(eq, v); } catch (err) { console.log('[vite] nSingle: nerdamer error', err.message); return null; }
+    try { sol = nd.solve(eq, v); } catch (err) { console.log('nSingle: nerdamer error', err.message); return null; }
     const vals = nerdamerVals(sol);
-    if (!vals.length) { console.log('[vite] nSingle: no solutions'); return null; }
+    if (!vals.length) { console.log('nSingle: no solutions'); return null; }
     const answer = { v, val: vals.join(', ') };
     const parts = eq.split('=');
     if (parts.length !== 2) return { answers: [answer], work: ['Equation:', '  ' + eq, '', 'Solution:', `  ${v} = ${vals.join(', ')}`] };
@@ -767,7 +769,6 @@
     return { answers: [{ v: 'x', val: ans }], work };
   }
 
-  // ABSOLUTE VALUE EQUATION
   function solveAbsEq(text) {
     const eqLine = text.split('\n').find(l => /\|.*\|/.test(l) && /=/.test(l));
     if (!eqLine) return null;
@@ -791,7 +792,7 @@
       sol2 = nerdamerVals(nd.solve(`${inner}=−${rhsVal}`, v))[0];
     } catch (e) { return null; }
     if (rhsVal < 0) {
-      return { answers: [{ v, val: 'no solution' }], work: ['Absolute value equation:', `  ${eq}`, '', 'The absolute value equals a negative number — no solution.'] };
+      return { answers: [{ v, val: 'no solution' }], work: ['Absolute value equation:', `  ${eq}`, '', 'Absolute value equals a negative — no solution.'] };
     }
     const work = ['Absolute value equation:', `  ${eq}`, ''];
     work.push('Isolate the absolute value:');
@@ -811,7 +812,6 @@
     return { answers: [{ v, val: `${sol1}, ${sol2}` }], work };
   }
 
-  // ABSOLUTE VALUE INEQUALITY
   function solveAbsIneq(text) {
     const m = text.match(/\|\s*([^|]+?)\s*\|\s*(<=|>=|<|>)\s*(-?\d+\.?\d*)/);
     if (!m) return null;
@@ -875,7 +875,7 @@
     let sol; try { sol = nd.solve(eq, 'x'); } catch (err) { return null; }
     const vals = nerdamerVals(sol);
     if (!vals.length) return null;
-    return { answers: [{ v: 'x', val: vals.join(', ') }], work: ['Logarithmic equation:', `  ${eq}`, '', 'Solve:', '', ...vals.map(v => `  x = ${v}`)] };
+    return { answers: [{ v: 'x', val: vals.join(', ') }], work: ['Log equation:', `  ${eq}`, '', 'Solve:', '', ...vals.map(v => `  x = ${v}`)] };
   }
 
   function solveExp(text) {
@@ -1379,7 +1379,6 @@
     return null;
   }
 
-  // PROPERTIES
   function mkProp(name) {
     return { answers: [{ v: 'Property', val: name }], work: ['Property illustrated:', '', `  ${name}`] };
   }
@@ -1422,9 +1421,7 @@
     return null;
   }
 
-  // ============================================================
-  // WORD PROBLEM (Groq)
-  // ============================================================
+  // ai fallback for word problems
   const WORD_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
 
 The input text is scraped from a homework page and may contain noise. Reconstruct the intended problem first, then solve.
@@ -1466,7 +1463,7 @@ Rules:
     });
     if (!r.ok) {
       const err = await r.text();
-      if (r.status === 401) { clearGroqKey(); showToast('bad key — cleared'); }
+      if (r.status === 401) { clearGroqKey(); showToast('bad key, cleared'); }
       throw new Error(`Groq ${r.status}: ${err.slice(0, 120)}`);
     }
     const data = await r.json();
@@ -1477,10 +1474,10 @@ Rules:
     if (!getGroqKey()) { const k = promptForKey(); if (!k) return null; }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
     if (clean.length < 15) return null;
-    showToast('asking AI…');
+    showToast('asking ai…');
     let data;
-    try { data = await askGroq(clean); } catch (e) { console.warn(e); showToast('Groq failed'); return null; }
-    if (data.error) { showToast('AI: ' + data.error); return null; }
+    try { data = await askGroq(clean); } catch (e) { console.warn(e); showToast('groq failed'); return null; }
+    if (data.error) { showToast('ai: ' + data.error); return null; }
     if (!data.solution || !data.variables) return null;
     const answers = data.variables.map(v => ({ v, val: data.solution[v] != null ? String(data.solution[v]) : '?' }));
     const work = ['Word problem:', ''];
@@ -1494,9 +1491,7 @@ Rules:
     return { answers, work };
   }
 
-  // ============================================================
-  // FAILURE LOG — captures problems the solver can't handle
-  // ============================================================
+  // failed problem log
   function openDB() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('dm_fails', 1);
@@ -1519,7 +1514,7 @@ Rules:
         tx.objectStore('fails').add(entry);
         tx.oncomplete = () => res();
       });
-    } catch (e) { console.warn('[vite] fail log add', e); }
+    } catch (e) { console.warn('db add', e); }
   }
   async function dbAll() {
     try {
@@ -1560,13 +1555,12 @@ Rules:
           screenshot = canvas.toDataURL('image/png');
         }
       }
-    } catch (e) { console.warn('[vite] screenshot failed', e); }
+    } catch (e) { console.warn('screenshot failed', e); }
 
     await dbAdd({ time: Date.now(), url: location.href, type, problem, screenshot });
-    console.log('%c[vite] failure logged', 'color:#c49a3a');
+    console.log('failure logged');
   }
 
-  // SEND TO OWNER (webhook)
   function b64ToBlob(b64) {
     const bin = atob(b64);
     const arr = new Uint8Array(bin.length);
@@ -1595,7 +1589,7 @@ Rules:
         await new Promise(res => setTimeout(res, 500));
       } catch (e) { console.warn(e); failed++; }
     }
-    showToast(`sent ${sent} · failed ${failed}`);
+    showToast(`sent ${sent}, failed ${failed}`);
   }
 
   async function showFailLog() {
@@ -1643,7 +1637,7 @@ Rules:
       const text = fails.map((f, i) =>
         `--- Failure #${i + 1} (${new Date(f.time).toLocaleString()}) ---\nType: ${f.type}\nURL: ${f.url}\n\nProblem text:\n${f.problem}\n`
       ).join('\n\n');
-      navigator.clipboard.writeText(text).then(() => showToast('copied text'));
+      navigator.clipboard.writeText(text).then(() => showToast('copied'));
     };
     box.querySelector('#__dm_f_dl').onclick = () => {
       const blob = new Blob([JSON.stringify(fails, null, 2)], { type: 'application/json' });
@@ -1654,9 +1648,7 @@ Rules:
     };
   }
 
-  // ============================================================
-  // DISPATCH
-  // ============================================================
+  // router
   function detect(t) {
     if (/\bsolve the (following )?system\b/i.test(t) || /\bby substitution\b/i.test(t) || /\bby elimination\b/i.test(t)) return 'system';
     if (/\bname the property\b/i.test(t) || /\bproperties?\s+of\s+real\s+numbers?\b/i.test(t)) return 'property';
@@ -1720,32 +1712,14 @@ Rules:
       if (imgText) text = text + '\n' + imgText;
     }
     if (!/[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text)) {
-      console.log('%c[vite] no equations in text — falling back to screenshot+OCR', 'color:#c49a3a');
+      console.log('no equations in DOM, falling back to screenshot+OCR');
       const ssText = await screenshotAndOCR();
       if (ssText) text = text + '\n' + ssText;
     }
-    // Normalize: fix "2and" and split "A=B and C=D" into separate lines
     text = normalizeEqText(text);
-      function normalizeEqText(text) {
-    // "2and" → "2 and " so the splitter regex works
-    let t = text.replace(/(\d)\s*and\s+/gi, '$1 and ');
-    const lines = t.split('\n');
-    const out = [];
-    for (const l of lines) {
-      if ((l.match(/=/g) || []).length >= 2 && /\band\b/i.test(l)) {
-        const parts = l.split(/\band\b/i).map(s => s.trim()).filter(Boolean);
-        if (parts.length === 2 && parts.every(p => /=/.test(p))) {
-          parts.forEach(p => out.push(p));
-          continue;
-        }
-      }
-      out.push(l);
-    }
-    return out.join('\n');
-  }
-    console.log('%c[vite:problem]', 'color:#7a9ec9', '\n' + text);
+    console.log('problem text:\n' + text);
     const type = detect(text);
-    console.log('%c[vite] detected:', 'color:#7a9ec9', type);
+    console.log('detected: ' + type);
     const nd = window.nerdamer;
     const table = {
       system: nd ? nSystem : null,
@@ -1800,7 +1774,6 @@ Rules:
     showModal(r);
   }
 
-  // MENU
   function openMenu() {
     const old = document.getElementById('__dm_menu'); if (old) old.remove();
     const m = document.createElement('div');
@@ -1828,9 +1801,8 @@ Rules:
     setTimeout(() => document.addEventListener('click', off, true), 0);
   }
 
-  // SELF UPDATE
   async function selfUpdate() {
-    if (!CONFIG.SELF_UPDATE_URL) { showToast('no SELF_UPDATE_URL'); return; }
+    if (!CONFIG.SELF_UPDATE_URL) { showToast('no update url'); return; }
     showToast('updating…');
     let code;
     try {
@@ -1839,17 +1811,16 @@ Rules:
       if (!r.ok) throw new Error('HTTP ' + r.status);
       code = await r.text();
       if (!code || code.length < 200) throw new Error('empty');
-    } catch (e) { console.warn(e); showToast('update failed — fetch'); return; }
+    } catch (e) { console.warn(e); showToast('update failed'); return; }
     try { runCleanup(); } catch (e) {}
     document.querySelectorAll('#__dm_btn, #__dm_modal, #__dm_menu, #__dm_toast').forEach(n => n.remove());
     [...document.querySelectorAll('[id^="__dm_"]')].forEach(n => n.remove());
     window.__dm3 = 0;
     await new Promise(res => setTimeout(res, 60));
-    try { (0, eval)(code); console.log('%c[vite] updated', 'color:#8a8a8a'); }
-    catch (e) { console.warn(e); console.error('[vite] update eval failed — re-paste manually'); window.__dm3 = 0; }
+    try { (0, eval)(code); console.log('updated'); }
+    catch (e) { console.warn(e); console.error('update eval failed, re-paste manually'); window.__dm3 = 0; }
   }
 
-  // MODAL
   function showModal(r) {
     const old = document.getElementById('__dm_modal'); if (old) old.remove();
     const wrap = document.createElement('div');
@@ -1898,5 +1869,5 @@ Rules:
     setTimeout(() => t.remove(), 2600);
   }
 
-  console.log('%c[vite] connected', 'color:#8a8a8a');
+  console.log('ready');
 })();
