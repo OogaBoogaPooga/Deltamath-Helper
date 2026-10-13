@@ -250,18 +250,23 @@
     const body = cut > 0 ? raw.slice(0, cut) : raw;
     let lines = body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
     lines = lines.filter(l => {
-      if (!l) return false;
-      if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
-      if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
-      return true;
-      if (/^=\s*[A-Z]/.test(l)) return false;
+    if (!l) return false;
+    if (/^=\s*\S/.test(l)) return false;
+    if (/, (equals|plus|minus|negative|x|y|z|a|b|c|w|is|the|of|over|times|divided)\b/i.test(l) && (l.match(/,/g) || []).length >= 3) return false;
+    if (/^(minus|plus|negative|equals|open|close)\b/i.test(l)) return false;
+    return true;
+    if (/^=\s*[A-Z]/.test(l)) return false;
     });
     const merged = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i], next = lines[i + 1];
-      // merge anything that ends in "=" with whatever comes next
-      if (/=\s*$/.test(l) && next && !/^=/.test(next)) { merged.push(l + next); i++; }
-      else merged.push(l);
+      // merge any line ending in "=" with the following line
+      if (/=\s*$/.test(l) && next && !/^=/.test(next) && next.length < 100) {
+        merged.push(l + next);
+        i++;
+      } else {
+        merged.push(l);
+      }
     }
     return merged.join('\n');
   }
@@ -1223,7 +1228,7 @@ Rules:
     }
     if (/\|.*\|/.test(t) && /\bsolve\b/i.test(t)) return 'abs';
     if (/\b(sin|cos|tan)\s*\(?/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'trig';
-    if (/\b(log|ln)\b/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'log';
+    if (/(?:^|\s)(?:log|ln)\s*[\(\d]/.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'log';
     if (/[\de]\s*\^\s*\(?\s*[a-z]/i.test(t) && /\bsolve\b/i.test(t)) return 'exp';
     if (/sqrt\s*\(/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'radical';
     if (/\/\s*\([^)]*x/i.test(t) && /[=]/.test(t) && /\bsolve\b/i.test(t)) return 'rational';
