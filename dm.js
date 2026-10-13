@@ -8,7 +8,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    AI_MODEL: 'deepseek/deepseek-r1:free',
+    AI_MODEL: 'nvidia/nemotron-3-super-120b-a12b:free',
     OWNER_WEBHOOK: '',
   };
 
@@ -1425,19 +1425,24 @@
     return null;
   }
 
-  const AI_SYSTEM_PROMPT = `You are a math tutor helping a student solve a word problem.
+  const AI_SYSTEM_PROMPT = `You are a math tutor. The input is scraped from a homework page and will often contain OCR errors from Tesseract reading rendered math — common mistakes include:
+- "3x" misread as "Jr", "2x" as "2g", "x" as "r", "g", "z", "q", or "cc"
+- "+" misread as "t", "-" as "—"
+- "=" dropped or misread as "E" or "e"
+- decimals losing their dot
+- coefficient and variable split across lines
 
-The input text is scraped from a homework page and may contain noise. Reconstruct the intended problem first, then solve.
+Your first job is to reconstruct the intended problem from the noise. Then solve it.
 
 Return ONLY valid JSON matching this exact shape:
 {"variables":["x","y"],"meanings":{"x":"..."},"equations":["..."],"solution":{"x":"..."},"work":["step 1","step 2"]}
 
 Rules:
-- Equations use standard math notation.
-- Solution values exact — use fractions like "3/2" not "1.5".
-- Work steps read like a student writing in a notebook.
-- If unsolvable, return {"error":"reason"}.`;
-
+- Variables in equations use standard single letters (x, y, z, a, b, c).
+- Solutions are exact — use fractions like "3/2", not "1.5".
+- Work steps read like a student writing in a notebook, one step per line.
+- If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
+  
   function wrapText(s, width) {
     const words = s.split(/\s+/);
     const lines = [];
