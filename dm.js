@@ -8,7 +8,7 @@
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
-    AI_MODEL: 'nvidia/nemotron-3-super-120b-a12b:free',
+    AI_MODEL: 'openai/gpt-oss-120b',
     OWNER_WEBHOOK: '',
   };
 
