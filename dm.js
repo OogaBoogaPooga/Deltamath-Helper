@@ -1653,6 +1653,36 @@ Format:
 - Irrational: leave as "√5/2".
 - "no solution" or "all real numbers" written verbatim.
 
+=== GENERIC FALLBACK ===
+
+If the problem type is not one of the templates above (trig, log, exponential, radical, rational, sequence, statistics, geometry, word problem, etc.), use this universal format:
+
+"Problem:"
+"  <the problem as you reconstructed it>"
+""
+"<Step label ending in colon:>"
+"  <before>"
+"  <after>"
+""
+"<Next step label ending in colon:>"
+"  <before>"
+"  <after>"
+""
+...
+"Solution:   <final answer>"
+
+Rules for the fallback:
+- Same operation-label style as the other templates (capital letter, ends with colon).
+- Same indentation (two spaces under a label).
+- Same "Solution:" final line.
+- NO matrix notation, no row operations, no "R1", no "[ 3 8 | 2 ]".
+- For word problems: start with "Problem:" and the reconstructed text on the next line (indented), then "Assign variables:" with each on its own line, then "Set up equations:" with the equations, then the algebraic steps, then "Solution:".
+- For trig/log/exponential: the operation labels are things like "Take the log of both sides:", "Rewrite in exponential form:", "Isolate the log:", "Apply the quadratic formula:", "Divide both sides by <coef>:".
+- For statistics: label the metric ("Mean:", "Median:", etc.) with the calculation on the following indented line.
+- For anything you don't recognize: reconstruct the best interpretation and show the arithmetic step by step. It's fine if the labels are custom — just keep the "label:" then indented-before-and-after format.
+
+If you still cannot reconstruct a solvable problem after applying the generic format, return {"error":"reason"}.
+
 If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
   
   function wrapText(s, width) {
