@@ -101,6 +101,11 @@
     if (/mq-subscript/.test(cls)) { const sub = node.querySelector('.mq-sub'); return '_(' + (sub ? walkMath(sub) : '?') + ')'; }
     if (/mq-sqrt|mq-radical/.test(cls)) { const inner = node.querySelector('.mq-non-leaf, .mq-root-block'); return 'sqrt(' + (inner ? walkMath(inner) : '?') + ')'; }
     if (/\bmq-sup\b|\bmq-sub\b|\bmq-numerator\b|\bmq-denominator\b|\bmq-fraction-bar\b|\bmq-cursor\b/.test(cls)) return '';
+    if (/mq-abs|katex-abs|\\lvert|absolute/.test(cls)) {
+      let inner = '';
+      for (const c of node.childNodes) inner += walkMath(c);
+      return '|' + inner + '|';
+    }
     if (/\bkatex\b/.test(cls) && !/katex-mathml|katex-html|katex-display/.test(cls)) {
       const mml = node.querySelector('.katex-mathml'); if (mml) return walkMath(mml);
       const html = node.querySelector('.katex-html'); if (html) return walkMath(html);
