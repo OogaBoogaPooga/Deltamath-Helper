@@ -1609,6 +1609,14 @@ Format:
 "Check both in the original equation (extraneous solutions may occur)."
 ""
 "Solution:   <var> = <val1>, <var> = <val2>"
+If the original problem says "check your solutions", add a verification block after the two cases:
+""
+"Check:"
+""
+"  x = <val1>:   |<inner>| = <evaluated>   ✓"
+"  x = <val2>:   |<inner>| = <evaluated>   ✓"
+""
+Then the "Solution:" line.
 
 === QUADRATIC ===
 
