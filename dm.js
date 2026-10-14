@@ -74,6 +74,30 @@
       #__dm_menu > div:active { transform: scale(0.98); }
       #__dm_modal button { transition: background .12s ease, border-color .12s ease, transform .1s ease; }
       #__dm_modal button:active { transform: scale(0.97); }
+
+      @keyframes dm-spin-arc {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .dm-spinner {
+        display: inline-block;
+        width: 20px; height: 20px;
+        animation: dm-spin-arc .9s linear infinite;
+      }
+      .dm-spinner rect { fill: currentColor; }
+
+      #__dm_toast_stack {
+        position: fixed;
+        bottom: 70px;
+        right: 20px;
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 8px;
+        z-index: 2147483001;
+        pointer-events: none;
+        align-items: flex-end;
+      }
+      #__dm_toast_stack > div { pointer-events: auto; }
     `;
     document.head.appendChild(s);
   })();
@@ -2006,8 +2030,23 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     if (!hasEquation && wordCount > 20) return 'word';
     return 'unknown';
   }
+  const SPINNER_HTML = `<svg class="dm-spinner" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g transform="translate(12,12)"><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(45)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.1125s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(90)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.225s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(135)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.3375s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(180)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.45s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(225)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.5625s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(270)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.675s" repeatCount="indefinite"/></rect><rect x="-1" y="-10" width="2" height="5" rx="1" opacity="0.15" transform="rotate(315)"><animate attributeName="opacity" values="0.15;1;0.15" dur="0.9s" begin="0.7875s" repeatCount="indefinite"/></rect></g></svg>`;
 
+  let btnOriginalHTML = null;
+  function setLoading(on) {
+    if (!btnOriginalHTML) btnOriginalHTML = btn.innerHTML;
+    if (on) {
+      btn.innerHTML = SPINNER_HTML;
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '1';
+    } else {
+      btn.innerHTML = btnOriginalHTML;
+      btn.style.pointerEvents = '';
+    }
+  }
   async function run() {
+    setLoading(true);
+    try {
     const mathEqs = extractMathML();
     console.log('MathML equations:', mathEqs);
 
@@ -2096,6 +2135,9 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       return;
     }
     showModal(r);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function openMenu() {
@@ -2211,11 +2253,16 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
   }
 
   function showToast(text) {
+    let stack = document.getElementById('__dm_toast_stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = '__dm_toast_stack';
+      document.body.appendChild(stack);
+    }
     const t = document.createElement('div');
-    t.id = '__dm_toast';
     t.textContent = text;
-    t.style.cssText = `position:fixed;bottom:70px;right:20px;background:rgba(28,28,30,.92);color:#e6e6e6;font:12px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;padding:9px 14px;border-radius:8px;z-index:2147483001;box-shadow:0 8px 24px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);`;
-    document.body.appendChild(t);
+    t.style.cssText = `background:rgba(28,28,30,.92);color:#e6e6e6;font:12px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;padding:9px 14px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);max-width:280px;`;
+    stack.appendChild(t);
     t.style.animation = 'dm-toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1)';
     setTimeout(() => {
       t.style.animation = 'dm-toast-out 200ms ease-in forwards';
