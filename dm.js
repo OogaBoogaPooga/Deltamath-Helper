@@ -1445,23 +1445,26 @@
     return null;
   }
 
-  const AI_SYSTEM_PROMPT = `You are a math tutor. The input is scraped from a homework page and will often contain OCR errors from Tesseract reading rendered math — common mistakes include:
-- "3x" misread as "Jr", "2x" as "2g", "x" as "r", "g", "z", "q", or "cc"
-- "+" misread as "t", "-" as "—"
-- "=" dropped or misread as "E" or "e"
-- decimals losing their dot
-- coefficient and variable split across lines
-
-Your first job is to reconstruct the intended problem from the noise. Then solve it.
+  const AI_SYSTEM_PROMPT = `You are a math tutor. The input is scraped from a homework page and may contain OCR errors from Tesseract — common mistakes include "3x" misread as "Jr", "2x" as "2g", "x" as "r", "g", "z", "q" or "cc", "+" as "t", "=" dropped or shown as "E", and decimals losing their dot. Reconstruct the intended problem first, then solve it.
 
 Return ONLY valid JSON matching this exact shape:
-{"variables":["x","y"],"meanings":{"x":"..."},"equations":["..."],"solution":{"x":"..."},"work":["step 1","step 2"]}
+{"variables":["x","y","z"],"equations":["x + y + z = 6","2x - y + z = 3","x + 2y - z = 2"],"solution":{"x":"1","y":"2","z":"3"},"work":["Given system:","","  (1)   x + y + z = 6","  (2)   2x - y + z = 3","  (3)   x + 2y - z = 2","","Step 1: Eliminate x","","  Stack (1) and (2):","    (1)   x + y + z = 6","    (2)   2x - y + z = 3","","  Multiply to match x-coefficients:","    2 × (1):   2x + 2y + 2z = 12","    1 × (2):   2x - y + z = 3","","  Subtract 1 × (2) from 2 × (1):","      2x + 2y + 2z = 12","    − 2x - y + z  = 3","    ──────────────────────","      3y + z      = 9     (4)","","  Stack (1) and (3):","    (1)   x + y + z = 6","    (3)   x + 2y - z = 2","","  Subtract 1 × (3) from 1 × (1):","      x + y + z   = 6","    − x + 2y - z  = 2","    ──────────────────────","      -y + 2z     = 4     (5)","","Step 2: Eliminate y","","  Stack (4) and (5):","    (4)   3y + z = 9","    (5)   -y + 2z = 4","","  Multiply to match y-coefficients:","    1 × (4):   3y + z = 9","    3 × (5):   -3y + 6z = 12","","  Add 1 × (4) and 3 × (5):","      3y + z   = 9","    + -3y + 6z = 12","    ──────────────────────","      7z       = 21     (6)","","From (6):","  7z = 21","  Divide both sides by 7:","    z = 3","","From (4):   3y + z = 9","  Substitute z = 3:","    3y + 3 = 9","    3y = 6","    y = 2","","From (1):   x + y + z = 6","  Substitute y = 2, z = 3:","    x + 2 + 3 = 6","    x + 5 = 6","    x = 1","","Solution:   x = 1,   y = 2,   z = 3"]}
 
-Rules:
-- Variables in equations use standard single letters (x, y, z, a, b, c).
-- Solutions are exact — use fractions like "3/2", not "1.5".
-- Work steps read like a student writing in a notebook, one step per line.
-- If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
+Format rules for the "work" array:
+- Read like a student copying steps into a notebook. NEVER use matrix notation like [ 3 8 | 2 ].
+- First block: "Given system:" then blank line then each equation labeled "  (1)   ...", "  (2)   ..." etc.
+- Each elimination step: "Step N: Eliminate <var>" then blank line, then for each pair of equations: "  Stack (A) and (B):", the two equations indented, blank, "  Multiply to match <var>-coefficients:" only if multipliers aren't 1, then either "  Subtract X × (A) from Y × (B):" or "  Add X × (A) and Y × (B):", then the two scaled equations stacked vertically with a "    − " or "    + " prefix on the second, then a "    ──────" divider, then the result line ending with "     (N)" where N is the next equation label.
+- Back-substitution: "From (N):   <equation>" then "  Substitute ...:" then the substituted line with parens, then the simplified line, then the isolated variable.
+- Final line: "Solution:   x = ...,   y = ...,   z = ..." with three spaces between label and value, and three spaces between each variable's answer.
+- Use unicode minus − where natural, regular - is fine too. Use × for multiplication.
+
+Rules for "equations": plain ASCII math with spaces: "3x + 8y = 2" not "3x+8y=2".
+Rules for "solution": exact values. Fractions like "3/2" not "1.5". Negative numbers with a leading -.
+Rules for "variables": just the letters, e.g. ["x","y","z"].
+
+If the problem has only one equation, work should just be ["Equation:", "  <eq>", "", "Solve:", "", "  x = ...", "", "Solution:   x = ..."].
+
+If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
   
   function wrapText(s, width) {
     const words = s.split(/\s+/);
@@ -1516,14 +1519,15 @@ Rules:
     if (data.error) return null;
     if (!data.solution || !data.variables) return null;
     const answers = data.variables.map(v => ({ v, val: data.solution[v] != null ? String(data.solution[v]) : '?' }));
-    const work = ['Word problem:', ''];
-    wrapText(clean, 68).forEach(l => work.push('  ' + l));
-    work.push('', 'Assign variables:');
-    data.variables.forEach(v => work.push(`  ${v} = ${data.meanings?.[v] || v}`));
-    work.push('', 'Set up equations:');
-    (data.equations || []).forEach((eq, i) => work.push(`  (${i + 1})   ${eq}`));
-    work.push('', 'Solve:');
-    (data.work || []).forEach(line => work.push(`  ${line}`));
+    const work = Array.isArray(data.work) && data.work.length
+      ? data.work
+      : (() => {
+          const w = ['Given system:', ''];
+          (data.equations || []).forEach((eq, i) => w.push(`  (${i + 1})   ${eq}`));
+          w.push('');
+          w.push(`Solution:   ${data.variables.map(v => `${v} = ${data.solution[v]}`).join(',   ')}`);
+          return w;
+        })();
     return { answers, work };
   }
 
