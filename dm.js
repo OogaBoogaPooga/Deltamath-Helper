@@ -5,6 +5,79 @@
   if (window.__dm3) { console.log('already running'); return; }
   window.__dm3 = 1;
 
+  // ui animations
+  (function injectStyles() {
+    if (document.getElementById('__dm_styles')) return;
+    const s = document.createElement('style');
+    s.id = '__dm_styles';
+    s.textContent = `
+      @keyframes dm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes dm-fade-out { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes dm-pop-in {
+        from { opacity: 0; transform: translateY(14px) scale(0.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes dm-pop-out {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to { opacity: 0; transform: translateY(8px) scale(0.97); }
+      }
+      @keyframes dm-menu-in {
+        from { opacity: 0; transform: translateY(8px) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes dm-menu-out {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to { opacity: 0; transform: translateY(6px) scale(0.98); }
+      }
+      @keyframes dm-toast-in {
+        from { opacity: 0; transform: translateX(24px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes dm-toast-out {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(24px); }
+      }
+      @keyframes dm-slide-down {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes dm-btn-in {
+        from { opacity: 0; transform: scale(0.4); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes dm-stagger {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      #__dm_work_body { scroll-behavior: smooth; }
+      #__dm_work_body::-webkit-scrollbar,
+      #__dm_fails pre::-webkit-scrollbar {
+        width: 8px; height: 8px;
+      }
+      #__dm_work_body::-webkit-scrollbar-track,
+      #__dm_fails pre::-webkit-scrollbar-track { background: transparent; }
+      #__dm_work_body::-webkit-scrollbar-thumb,
+      #__dm_fails pre::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,.14); border-radius: 4px;
+      }
+      #__dm_work_body::-webkit-scrollbar-thumb:hover,
+      #__dm_fails pre::-webkit-scrollbar-thumb:hover {
+        background: rgba(0,0,0,.24);
+      }
+      #__dm_btn {
+        transition: background .15s ease,
+                    box-shadow .2s cubic-bezier(0.16,1,0.3,1),
+                    transform .15s cubic-bezier(0.16,1,0.3,1);
+      }
+      #__dm_btn:active { transform: scale(0.92); }
+      #__dm_menu > div { transition: background .1s ease, transform .1s ease; }
+      #__dm_menu > div:active { transform: scale(0.98); }
+      #__dm_modal button { transition: background .12s ease, border-color .12s ease, transform .1s ease; }
+      #__dm_modal button:active { transform: scale(0.97); }
+    `;
+    document.head.appendChild(s);
+  })();
+
   const CONFIG = {
     SELF_UPDATE_URL: 'https://raw.githubusercontent.com/OogaBoogaPooga/Deltamath-Helper/refs/heads/main/dm.js',
     OCR_LANG: 'eng',
@@ -54,10 +127,11 @@
   // the ? button
   const btn = document.createElement('div');
   btn.id = '__dm_btn';
-  btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;border:1px solid rgba(0,0,0,.05);box-shadow:0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10);transition:background .12s ease, box-shadow .12s ease;`;
+  btn.style.cssText = `position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;z-index:2147483000;border:1px solid rgba(0,0,0,.05);box-shadow:0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10);`;
   btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
   btn.addEventListener('mouseenter', () => { btn.style.background = '#f9fafb'; btn.style.boxShadow = '0 4px 12px rgba(0,0,0,.20), 0 2px 4px rgba(0,0,0,.12)'; });
   btn.addEventListener('mouseleave', () => { btn.style.background = '#ffffff'; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.10)'; });
+  btn.style.animation = 'dm-btn-in 320ms cubic-bezier(0.16, 1, 0.3, 1)';
   document.documentElement.appendChild(btn);
   btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); run(); }, true);
   btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); openMenu(); }, true);
@@ -101,11 +175,6 @@
     if (/mq-subscript/.test(cls)) { const sub = node.querySelector('.mq-sub'); return '_(' + (sub ? walkMath(sub) : '?') + ')'; }
     if (/mq-sqrt|mq-radical/.test(cls)) { const inner = node.querySelector('.mq-non-leaf, .mq-root-block'); return 'sqrt(' + (inner ? walkMath(inner) : '?') + ')'; }
     if (/\bmq-sup\b|\bmq-sub\b|\bmq-numerator\b|\bmq-denominator\b|\bmq-fraction-bar\b|\bmq-cursor\b/.test(cls)) return '';
-    if (/mq-abs|katex-abs|\\lvert|absolute/.test(cls)) {
-      let inner = '';
-      for (const c of node.childNodes) inner += walkMath(c);
-      return '|' + inner + '|';
-    }
     if (/\bkatex\b/.test(cls) && !/katex-mathml|katex-html|katex-display/.test(cls)) {
       const mml = node.querySelector('.katex-mathml'); if (mml) return walkMath(mml);
       const html = node.querySelector('.katex-html'); if (html) return walkMath(html);
@@ -124,16 +193,14 @@
     for (const c of node.childNodes) out += walkMath(c);
     return out;
   }
+
   function extractMathML() {
     const eqs = [];
     document.querySelectorAll('math').forEach(math => {
       let text = '';
       const ann = math.querySelector('annotation[encoding="application/x-tex"]');
       if (ann) {
-        text = ann.textContent
-          .replace(/\\displaystyle\s*/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
+        text = ann.textContent.replace(/\\displaystyle\s*/g, '').replace(/\s+/g, ' ').trim();
       } else {
         const sem = math.querySelector('semantics');
         const target = sem ? (sem.querySelector('mrow') || sem) : math;
@@ -144,7 +211,7 @@
     });
     return eqs;
   }
-  
+
   function problemText() {
     const clone = document.body.cloneNode(true);
     clone.querySelectorAll('script, style, noscript, link, meta, svg').forEach(n => n.remove());
@@ -238,29 +305,7 @@
     }
     return out.join('\n');
   }
-  async function copyQuestionScreenshot() {
-    let target = null;
-    for (const el of document.querySelectorAll('div,section,main')) {
-      const t = el.innerText || '';
-      if (t.length < 100 || t.length > 4000) continue;
-      if (/\bQuestion\b/.test(t) && (/\bAnswer\b|\bSubmit\b/.test(t))) {
-        if (!target || t.length < (target.innerText || '').length) target = el;
-      }
-    }
-    if (!target) { showToast('could not find question area'); return; }
-    try {
-      showToast('capturing…');
-      if (window.html2canvas) {
-        const canvas = await window.html2canvas(target, { scale: 1, logging: false, useCORS: true, backgroundColor: '#ffffff' });
-        canvas.toBlob(async blob => {
-          try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); showToast('copied'); }
-          catch (e) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'problem.png'; a.click(); }
-        }, 'image/png');
-      } else {
-        showToast('capture unavailable');
-      }
-    } catch (e) { console.warn(e); showToast('capture failed'); }
-  }
+
   async function screenshotAndOCR() {
     if (!window.html2canvas || !window.Tesseract) return '';
     let target = null;
@@ -274,7 +319,6 @@
     if (!target) return '';
     try {
       showToast('reading equations…');
-      // scale 4 = much sharper text for tesseract, and constrain the character set
       const canvas = await window.html2canvas(target, { scale: 4, logging: false, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/png');
       const { data: { text } } = await window.Tesseract.recognize(dataUrl, 'eng', {
@@ -284,7 +328,6 @@
       let cleaned = text;
       const cut = cleaned.search(/\bAttempt\b/i);
       if (cut > 0) cleaned = cleaned.slice(0, cut);
-      // common OCR misreads of x when isolated as a coefficient or single var
       cleaned = cleaned
         .replace(/(^|\s|[-+*/=(])[zZ](?=\s*[=y+\-*/)]|$|\s)/g, '$1x')
         .replace(/(^|\s|[-+*/=(])[gq](?=\s*[=y+\-*/)]|$|\s)/g, '$1x')
@@ -718,7 +761,7 @@
     if (!m) return null;
     const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '');
     let out; try { out = nd(expr).toString(); } catch (err) { return null; }
-    return { answers: [{ v: 'simplified', val: out }], work: ['Original:', `  ${expr}`, '', 'Simplified:', `  ${out}`] };
+    return { answers: [{ v: 'simplified', val: out }], work: ['Expression:', `  ${expr}`, '', 'Distribute and combine like terms:', `  ${out}`, '', `Answer:   ${out}`] };
   }
 
   function nFactor(text) {
@@ -727,7 +770,7 @@
     if (!m) return null;
     const expr = cleanLine(m[1]).replace(/^.*?:\s*/, '').replace(/=0$/, '');
     let out; try { out = nd(`factor(${expr})`).toString(); } catch (err) { return null; }
-    return { answers: [{ v: 'factored', val: out }], work: ['Original:', `  ${expr}`, '', 'Factored:', `  ${out}`] };
+    return { answers: [{ v: 'factored', val: out }], work: ['Expression:', `  ${expr}`, '', 'Factor:', `  ${out}`, '', `Answer:   ${out}`] };
   }
 
   function manualDistance(text) {
@@ -1469,8 +1512,8 @@ Every "work" array is a list of lines that would be written in a notebook. Follo
 
 2. Every arithmetic operation gets its own labeled line ending in a colon, then the equation showing the arithmetic:
    "Subtract 4 from both sides:"
-   "  |2x + 8| - 4 = 12"     ← original
-   "  |2x + 8| = 16"           ← after
+   "  |2x + 8| - 4 = 12"
+   "  |2x + 8| = 16"
 
    "Divide both sides by 3:"
    "  3x = -6"
@@ -1609,14 +1652,6 @@ Format:
 "Check both in the original equation (extraneous solutions may occur)."
 ""
 "Solution:   <var> = <val1>, <var> = <val2>"
-If the original problem says "check your solutions", add a verification block after the two cases:
-""
-"Check:"
-""
-"  x = <val1>:   |<inner>| = <evaluated>   ✓"
-"  x = <val2>:   |<inner>| = <evaluated>   ✓"
-""
-Then the "Solution:" line.
 
 === QUADRATIC ===
 
@@ -1635,7 +1670,7 @@ Format:
 ""
 "  x = <val1>   or   x = <val2>"
 ""
-"Solution:   x = <val1>, <var> = <val2>"
+"Solution:   x = <val1>,   x = <val2>"
 
 === SIMPLIFICATION / EXPANSION ===
 
@@ -1647,11 +1682,6 @@ Format:
 "  <simplified>"
 ""
 "Answer:   <simplified>"
-
-=== SOLUTIONS ===
-- Fractions: "3/2", not "1.5". Integers as-is: "-2".
-- Irrational: leave as "√5/2".
-- "no solution" or "all real numbers" written verbatim.
 
 === GENERIC FALLBACK ===
 
@@ -1668,7 +1698,6 @@ If the problem type is not one of the templates above (trig, log, exponential, r
 "  <before>"
 "  <after>"
 ""
-...
 "Solution:   <final answer>"
 
 Rules for the fallback:
@@ -1679,12 +1708,14 @@ Rules for the fallback:
 - For word problems: start with "Problem:" and the reconstructed text on the next line (indented), then "Assign variables:" with each on its own line, then "Set up equations:" with the equations, then the algebraic steps, then "Solution:".
 - For trig/log/exponential: the operation labels are things like "Take the log of both sides:", "Rewrite in exponential form:", "Isolate the log:", "Apply the quadratic formula:", "Divide both sides by <coef>:".
 - For statistics: label the metric ("Mean:", "Median:", etc.) with the calculation on the following indented line.
-- For anything you don't recognize: reconstruct the best interpretation and show the arithmetic step by step. It's fine if the labels are custom — just keep the "label:" then indented-before-and-after format.
 
-If you still cannot reconstruct a solvable problem after applying the generic format, return {"error":"reason"}.
+=== SOLUTIONS ===
+- Fractions: "3/2", not "1.5". Integers as-is: "-2".
+- Irrational: leave as "√5/2".
+- "no solution" or "all real numbers" written verbatim.
 
 If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
-  
+
   function wrapText(s, width) {
     const words = s.split(/\s+/);
     const lines = [];
@@ -1706,8 +1737,6 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + key,
-        'HTTP-Referer': 'https://deltamath.com',
-        'X-Title': 'dm-helper',
       },
       body: JSON.stringify({
         model: CONFIG.AI_MODEL,
@@ -1726,9 +1755,21 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const data = await r.json();
     let text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('empty response');
-    text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    if (!text.startsWith('{')) {
+      const start = text.indexOf('{');
+      if (start < 0) throw new Error('no json');
+      let depth = 0, end = -1;
+      for (let i = start; i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+      }
+      if (end < 0) throw new Error('unbalanced json');
+      text = text.slice(start, end + 1);
+    }
     return JSON.parse(text);
   }
+
   async function solveWordProblem(text) {
     if (!getApiKey()) { const k = promptForKey(); if (!k) return null; }
     const clean = text.split('\n').map(l => l.trim()).filter(l => l.length > 0).join(' ').trim();
@@ -1856,8 +1897,6 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const wrap = document.createElement('div');
     wrap.id = '__dm_fails';
     wrap.style.cssText = `position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483002;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;`;
-    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-
     const items = fails.sort((a, b) => b.time - a.time).map(f => `
       <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:6px">
@@ -1884,11 +1923,18 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       <div style="overflow:auto;flex:1">${items}</div>`;
     wrap.appendChild(box);
     document.body.appendChild(wrap);
+    wrap.style.animation = 'dm-fade-in 180ms ease-out';
+    box.style.animation = 'dm-pop-in 260ms cubic-bezier(0.16, 1, 0.3, 1)';
 
-    box.querySelector('#__dm_f_close').onclick = () => wrap.remove();
+    const closeLog = () => {
+      wrap.style.animation = 'dm-fade-out 150ms ease-in forwards';
+      setTimeout(() => wrap.remove(), 150);
+    };
+    wrap.addEventListener('click', e => { if (e.target === wrap) closeLog(); });
+    box.querySelector('#__dm_f_close').onclick = closeLog;
     box.querySelector('#__dm_f_clear').onclick = async () => {
       if (!confirm('Clear all logged failures?')) return;
-      await dbClear(); wrap.remove(); showToast('cleared');
+      await dbClear(); closeLog(); showToast('cleared');
     };
     box.querySelector('#__dm_f_send').onclick = async () => { await sendToOwner(fails); };
     box.querySelector('#__dm_f_copy').onclick = () => {
@@ -1965,7 +2011,6 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const mathEqs = extractMathML();
     console.log('MathML equations:', mathEqs);
 
-    // Fast path — if we have clean equations from the DOM, solve locally. No OCR, no AI.
     if (mathEqs.length >= 2) {
       const parsed = mathEqs.map(e => parseEqFull(e)).filter(Boolean);
       if (parsed.length >= 2) {
@@ -1983,7 +2028,6 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       }
     }
 
-    // Fallback — no clean MathML, use the normal pipeline
     let text = problemText();
     const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
     if (!eqFound) {
@@ -2058,9 +2102,8 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const old = document.getElementById('__dm_menu'); if (old) old.remove();
     const m = document.createElement('div');
     m.id = '__dm_menu';
-    m.style.cssText = `position:fixed;bottom:64px;right:20px;background:#1c1c1f;color:#d0d0d0;font:12px/1.4 ui-monospace,Menlo,monospace;border:1px solid #2c2c30;border-radius:6px;padding:4px 0;z-index:2147483001;box-shadow:0 4px 18px rgba(0,0,0,.5);min-width:180px;`;
+    m.style.cssText = `position:fixed;bottom:64px;right:20px;background:#1c1c1f;color:#d0d0d0;font:12px/1.4 ui-monospace,Menlo,monospace;border:1px solid #2c2c30;border-radius:8px;padding:5px 0;z-index:2147483001;box-shadow:0 12px 32px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3);min-width:190px;overflow:hidden;`;
     const items = [
-      ['Copy problem screenshot', () => copyQuestionScreenshot()],
       ['Read text from image (OCR)', async () => { const t = await ocrImages(); showToast(t ? 'read' : 'no image'); }],
       ['Set API key', () => promptForKey()],
       ['Clear API key', () => { clearApiKey(); showToast('key cleared'); }],
@@ -2070,14 +2113,25 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;
-      it.style.cssText = `padding:6px 14px;cursor:pointer;`;
-      it.addEventListener('mouseenter', () => it.style.background = '#2a2a2e');
-      it.addEventListener('mouseleave', () => it.style.background = '');
-      it.addEventListener('click', () => { m.remove(); fn(); });
+      it.style.cssText = `padding:7px 14px;cursor:pointer;`;
+      it.addEventListener('mouseenter', () => { it.style.background = 'rgba(255,255,255,.05)'; });
+      it.addEventListener('mouseleave', () => { it.style.background = ''; });
+      it.addEventListener('click', () => {
+        m.style.animation = 'dm-menu-out 120ms ease-in forwards';
+        setTimeout(() => { m.remove(); fn(); }, 100);
+      });
       m.appendChild(it);
     });
     document.body.appendChild(m);
-    const off = e => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', off, true); } };
+    m.style.animation = 'dm-menu-in 200ms cubic-bezier(0.16, 1, 0.3, 1)';
+
+    const close = () => {
+      if (!m.parentNode) return;
+      m.style.animation = 'dm-menu-out 120ms ease-in forwards';
+      setTimeout(() => m.remove(), 100);
+      document.removeEventListener('click', off, true);
+    };
+    const off = e => { if (!m.contains(e.target) && e.target !== btn) close(); };
     setTimeout(() => document.addEventListener('click', off, true), 0);
   }
 
@@ -2093,7 +2147,7 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       if (!code || code.length < 200) throw new Error('empty');
     } catch (e) { console.warn(e); showToast('update failed'); return; }
     try { runCleanup(); } catch (e) {}
-    document.querySelectorAll('#__dm_btn, #__dm_modal, #__dm_menu, #__dm_toast').forEach(n => n.remove());
+    document.querySelectorAll('#__dm_btn, #__dm_modal, #__dm_menu, #__dm_toast, #__dm_styles').forEach(n => n.remove());
     [...document.querySelectorAll('[id^="__dm_"]')].forEach(n => n.remove());
     window.__dm3 = 0;
     await new Promise(res => setTimeout(res, 60));
@@ -2106,9 +2160,8 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const wrap = document.createElement('div');
     wrap.id = '__dm_modal';
     wrap.style.cssText = `position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(2px);z-index:2147483001;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;`;
-    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-    const answers = r.answers.map(a => `
-      <div style="display:flex;align-items:baseline;gap:14px;margin:6px 0">
+    const answers = r.answers.map((a, i) => `
+      <div style="display:flex;align-items:baseline;gap:14px;margin:6px 0;animation:dm-stagger 300ms cubic-bezier(0.16,1,0.3,1) ${i * 40}ms both">
         <span style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#333">${a.v}</span>
         <span style="font-size:20px;color:#999">=</span>
         <span style="font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:600;color:#111">${a.val}</span>
@@ -2127,15 +2180,32 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
       <pre id="__dm_work_body" style="display:none;margin-top:14px;padding:16px 20px;background:#fafbfc;border-radius:8px;border:1px solid #e6e8ec;font:12.5px/1.7 ui-monospace,Menlo,monospace;color:#2d3748;white-space:pre;overflow:auto;flex:1;min-height:0"></pre>`;
     wrap.appendChild(box);
     document.body.appendChild(wrap);
+
+    wrap.style.animation = 'dm-fade-in 180ms ease-out';
+    box.style.animation = 'dm-pop-in 260ms cubic-bezier(0.16, 1, 0.3, 1)';
+
     box.querySelector('#__dm_work_body').textContent = r.work.join('\n');
     const wb = box.querySelector('#__dm_work_body'), wbtn = box.querySelector('#__dm_work');
     wbtn.onclick = () => {
       const open = wb.style.display === 'block';
-      wb.style.display = open ? 'none' : 'block';
+      if (open) {
+        wb.style.display = 'none';
+      } else {
+        wb.style.display = 'block';
+        wb.style.animation = 'dm-slide-down 240ms cubic-bezier(0.16, 1, 0.3, 1)';
+      }
       wbtn.textContent = open ? 'Show work' : 'Hide work';
     };
-    box.querySelector('#__dm_close').onclick = () => wrap.remove();
-    const onKey = e => { if (e.key === 'Escape') { wrap.remove(); document.removeEventListener('keydown', onKey); } };
+
+    const closeModal = () => {
+      wrap.style.animation = 'dm-fade-out 150ms ease-in forwards';
+      box.style.animation = 'dm-pop-out 180ms cubic-bezier(0.4, 0, 1, 1) forwards';
+      setTimeout(() => wrap.remove(), 180);
+      document.removeEventListener('keydown', onKey);
+    };
+    box.querySelector('#__dm_close').onclick = closeModal;
+    wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+    const onKey = e => { if (e.key === 'Escape') closeModal(); };
     document.addEventListener('keydown', onKey);
     onCleanup(() => document.removeEventListener('keydown', onKey));
   }
@@ -2144,9 +2214,13 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     const t = document.createElement('div');
     t.id = '__dm_toast';
     t.textContent = text;
-    t.style.cssText = `position:fixed;bottom:70px;right:20px;background:rgba(28,28,30,.9);color:#e6e6e6;font:12px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;padding:8px 14px;border-radius:6px;z-index:2147483001;box-shadow:0 4px 12px rgba(0,0,0,.3);`;
+    t.style.cssText = `position:fixed;bottom:70px;right:20px;background:rgba(28,28,30,.92);color:#e6e6e6;font:12px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;padding:9px 14px;border-radius:8px;z-index:2147483001;box-shadow:0 8px 24px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);`;
     document.body.appendChild(t);
-    setTimeout(() => t.remove(), 2600);
+    t.style.animation = 'dm-toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1)';
+    setTimeout(() => {
+      t.style.animation = 'dm-toast-out 200ms ease-in forwards';
+      setTimeout(() => t.remove(), 200);
+    }, 2400);
   }
 
   console.log('ready');
