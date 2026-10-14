@@ -116,7 +116,27 @@
     for (const c of node.childNodes) out += walkMath(c);
     return out;
   }
-
+  function extractMathML() {
+    const eqs = [];
+    document.querySelectorAll('math').forEach(math => {
+      let text = '';
+      const ann = math.querySelector('annotation[encoding="application/x-tex"]');
+      if (ann) {
+        text = ann.textContent
+          .replace(/\\displaystyle\s*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      } else {
+        const sem = math.querySelector('semantics');
+        const target = sem ? (sem.querySelector('mrow') || sem) : math;
+        text = (target.textContent || '').replace(/\s+/g, '').trim();
+      }
+      text = cleanLine(text);
+      if (/=/.test(text) && /[a-z0-9]/i.test(text)) eqs.push(text);
+    });
+    return eqs;
+  }
+  
   function problemText() {
     const clone = document.body.cloneNode(true);
     clone.querySelectorAll('script, style, noscript, link, meta, svg').forEach(n => n.remove());
@@ -1720,6 +1740,12 @@ Rules:
 
   async function run() {
     let text = problemText();
+    // MathML equations are rendered client-side and often missing from the clone. Read them directly.
+    const mathEqs = extractMathML();
+    if (mathEqs.length) {
+      console.log('MathML equations:', mathEqs);
+      text = text + '\n' + mathEqs.join('\n');
+    }
     const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
     if (!eqFound) {
       const imgText = await ocrImages();
