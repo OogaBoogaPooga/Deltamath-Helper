@@ -18,7 +18,10 @@
   function clearApiKey() { try { localStorage.removeItem(KEY_STORAGE); } catch {} }
   function promptForKey() {
     const k = window.prompt('Enter your API key.\n\nStored only in this browser.', getApiKey());
-    if (k && /^sk-or-/.test(k.trim())) { setApiKey(k.trim()); return k.trim(); }
+    if (k && k.trim().length > 20 && !/\s/.test(k.trim())) {
+      setApiKey(k.trim());
+      return k.trim();
+    }
     if (k) showToast('invalid key format');
     return '';
   }
@@ -1482,7 +1485,7 @@ If you cannot reconstruct a solvable problem, return {"error":"reason"}.`;
     let key = getApiKey();
     if (!key) key = promptForKey();
     if (!key) throw new Error('no key');
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
