@@ -1739,13 +1739,29 @@ Rules:
   }
 
   async function run() {
-    let text = problemText();
-    // MathML equations are rendered client-side and often missing from the clone. Read them directly.
     const mathEqs = extractMathML();
-    if (mathEqs.length) {
-      console.log('MathML equations:', mathEqs);
-      text = text + '\n' + mathEqs.join('\n');
+    console.log('MathML equations:', mathEqs);
+
+    // Fast path — if we have clean equations from the DOM, solve locally. No OCR, no AI.
+    if (mathEqs.length >= 2) {
+      const parsed = mathEqs.map(e => parseEqFull(e)).filter(Boolean);
+      if (parsed.length >= 2) {
+        const varSet = new Set();
+        for (const e of parsed) for (const v of Object.keys(e.coef)) varSet.add(v);
+        const vars = [...varSet].sort();
+        if (parsed.length === vars.length && vars.length >= 2 && vars.length <= 4) {
+          const fullText = problemText();
+          const isSub = /by substitution/i.test(fullText);
+          try {
+            const r = isSub ? narrateSubstitution(parsed, vars, mathEqs) : narrateSystem(parsed, vars);
+            if (r) { showModal(r); return; }
+          } catch (e) { console.warn(e); }
+        }
+      }
     }
+
+    // Fallback — no clean MathML, use the normal pipeline
+    let text = problemText();
     const eqFound = /[-+0-9a-z]\s*=\s*[-+0-9a-z]/i.test(text);
     if (!eqFound) {
       const imgText = await ocrImages();
